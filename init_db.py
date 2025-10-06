@@ -37,5 +37,6 @@ def init_database():
         print(f"Password: didi5566")
         print("================================\n")
 
+
 if __name__ == '__main__':
     init_database()
