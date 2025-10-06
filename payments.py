@@ -13,8 +13,8 @@ class PayPalPayment:
             self.mode = payment_method.paypal_mode or 'sandbox'
         else:
             self.client_id = os.getenv('PAYPAL_CLIENT_ID')
-            self.secret = os.getenv('PAYPAL_SECRET')
-            self.mode = os.getenv('PAYPAL_MODE', 'sandbox')
+            self.secret = os.getenv('PAYPAL_SECRET_KEY')
+            self.mode = os.getenv('PAYPAL_MODE', 'live')
         self.base_url = 'https://api-m.sandbox.paypal.com' if self.mode == 'sandbox' else 'https://api-m.paypal.com'
     
     def get_access_token(self):

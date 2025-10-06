@@ -20,7 +20,7 @@ class Config:
 
     # Payment keys
     PAYPAL_CLIENT_ID = os.getenv('PAYPAL_CLIENT_ID')
-    PAYPAL_SECRET = os.getenv('PAYPAL_SECRET')
+    PAYPAL_SECRET_KEY = os.getenv('PAYPAL_SECRET_KEY')
     PAYPAL_MODE = os.getenv('PAYPAL_MODE', 'live')  # sandbox or live
     
     PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY')
