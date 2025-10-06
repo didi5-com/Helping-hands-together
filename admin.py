@@ -151,7 +151,7 @@ def news():
             filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], 'news', filename)
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             file.save(filepath)
-            news.image = f'/static/uploads/news/{filename}'
+            news.image_path = f'/static/uploads/news/{filename}'
         
         db.session.add(news)
         db.session.commit()

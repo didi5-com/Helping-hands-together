@@ -127,7 +127,7 @@ def create_campaign():
             filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], 'campaigns', filename)
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             file.save(filepath)
-            campaign.image = f'/static/uploads/campaigns/{filename}'
+            campaign.image_path = f'/static/uploads/campaigns/{filename}'
         
         db.session.add(campaign)
         db.session.commit()
