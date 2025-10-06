@@ -32,6 +32,63 @@ class KYC(db.Model):
 
 class Campaign(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    goal_amount = db.Column(db.Float, nullable=False)
+    raised_amount = db.Column(db.Float, default=0.0)
+    image_path = db.Column(db.String(256))
+    category = db.Column(db.String(100))
+    location = db.Column(db.String(120))
+    published = db.Column(db.Boolean, default=False)
+    end_date = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    donations = db.relationship('Donation', backref='campaign', lazy='dynamic', cascade='all, delete-orphan')
+
+class Donation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'), nullable=False)
+    donor_name = db.Column(db.String(120))
+    donor_email = db.Column(db.String(120))
+    amount = db.Column(db.Float, nullable=False)
+    payment_method = db.Column(db.String(50))
+    transaction_id = db.Column(db.String(256))
+    status = db.Column(db.String(32), default='pending')
+    anonymous = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PaymentMethod(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # paypal, paystack, crypto, bank
+    details = db.Column(db.Text)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Location(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class News(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    image_path = db.Column(db.String(256))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    comments = db.relationship('Comment', backref='news', lazy='dynamic', cascade='all, delete-orphan')
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    news_id = db.Column(db.Integer, db.ForeignKey('news.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Campaign(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     goal_amount = db.Column(db.Float, default=0.0)
