@@ -10,17 +10,18 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Mail
-    MAIL_SERVER = os.getenv('MAIL_SERVER')
+    MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
     MAIL_PORT = int(os.getenv('MAIL_PORT') or 587)
     MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True') == 'True'
     MAIL_USERNAME = os.getenv('MAIL_USERNAME')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER') or os.getenv('MAIL_USERNAME')
+    MAIL_USE_SSL = False
 
     # Payment keys
     PAYPAL_CLIENT_ID = os.getenv('PAYPAL_CLIENT_ID')
     PAYPAL_SECRET = os.getenv('PAYPAL_SECRET')
-    PAYPAL_MODE = os.getenv('PAYPAL_MODE', 'sandbox')  # sandbox or live
+    PAYPAL_MODE = os.getenv('PAYPAL_MODE', 'live')  # sandbox or live
     
     PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY')
     PAYSTACK_PUBLIC_KEY = os.getenv('PAYSTACK_PUBLIC_KEY')

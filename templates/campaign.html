@@ -66,37 +66,72 @@
         <div class="col-lg-4">
             <div class="card sticky-top" style="top: 100px;">
                 <div class="card-body">
-                    <h4 class="card-title mb-4">Make a Donation</h4>
-                    <form method="POST" action="{{ url_for('main.donate', campaign_id=campaign.id) }}">
+                    <h4 class="card-title mb-4"><i class="bi bi-heart-fill text-danger"></i> Make a Donation</h4>
+                    <form method="POST" action="{{ url_for('main.donate', campaign_id=campaign.id) }}" id="donationForm">
                         {{ form.hidden_tag() }}
                         
                         <div class="mb-3">
                             {{ form.donor_name.label(class="form-label") }}
-                            {{ form.donor_name(class="form-control") }}
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                {{ form.donor_name(class="form-control", placeholder="Your Name") }}
+                            </div>
                         </div>
                         
                         <div class="mb-3">
                             {{ form.donor_email.label(class="form-label") }}
-                            {{ form.donor_email(class="form-control") }}
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                {{ form.donor_email(class="form-control", placeholder="your@email.com") }}
+                            </div>
                         </div>
                         
                         <div class="mb-3">
                             {{ form.amount.label(class="form-label") }}
-                            {{ form.amount(class="form-control") }}
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-currency-dollar"></i></span>
+                                {{ form.amount(class="form-control", placeholder="Enter amount") }}
+                            </div>
                         </div>
                         
                         <div class="mb-3">
                             {{ form.payment_method.label(class="form-label") }}
-                            {{ form.payment_method(class="form-select") }}
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-credit-card"></i></span>
+                                {{ form.payment_method(class="form-select", id="paymentMethodSelect") }}
+                            </div>
+                            <small class="text-muted" id="paymentMethodHelp"></small>
                         </div>
                         
                         <div class="mb-3 form-check">
-                            {{ form.anonymous(class="form-check-input") }}
+                            {{ form.anonymous(class="form-check-input", id="anonymousCheck") }}
                             {{ form.anonymous.label(class="form-check-label") }}
                         </div>
                         
-                        {{ form.submit(class="btn btn-primary w-100 btn-lg") }}
+                        {{ form.submit(class="btn btn-primary w-100 btn-lg", value="Donate Now") }}
+                        <div class="text-center mt-2">
+                            <small class="text-muted"><i class="bi bi-shield-check"></i> Secure Payment Processing</small>
+                        </div>
                     </form>
+                    
+                    <script>
+                        document.getElementById('paymentMethodSelect').addEventListener('change', function() {
+                            const helpText = document.getElementById('paymentMethodHelp');
+                            const selectedOption = this.options[this.selectedIndex].text.toLowerCase();
+                            
+                            if (selectedOption.includes('paypal')) {
+                                helpText.innerHTML = '<i class="bi bi-info-circle"></i> You will be redirected to PayPal to complete your payment';
+                            } else if (selectedOption.includes('paystack')) {
+                                helpText.innerHTML = '<i class="bi bi-info-circle"></i> You will be redirected to Paystack for secure payment';
+                            } else if (selectedOption.includes('crypto')) {
+                                helpText.innerHTML = '<i class="bi bi-info-circle"></i> Pay with Bitcoin, Ethereum, or other cryptocurrencies';
+                            } else if (selectedOption.includes('bank')) {
+                                helpText.innerHTML = '<i class="bi bi-info-circle"></i> Bank transfer instructions will be provided';
+                            } else {
+                                helpText.innerHTML = '';
+                            }
+                        });
+                    </script>
                 </div>
             </div>
         </div>

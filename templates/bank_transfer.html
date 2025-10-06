@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Bank Transfer Instructions - Helping Hand Together{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0"><i class="bi bi-bank"></i> Bank Transfer Instructions</h3>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        <strong>Donation Reference:</strong> DON-{{ donation.id }}
+                    </div>
+
+                    <h5 class="mb-3">Donation Details</h5>
+                    <table class="table table-bordered">
+                        <tr>
+                            <th width="30%">Campaign:</th>
+                            <td>{{ donation.campaign.title }}</td>
+                        </tr>
+                        <tr>
+                            <th>Amount:</th>
+                            <td class="fs-4 fw-bold text-success">${{ "%.2f"|format(donation.amount) }}</td>
+                        </tr>
+                        <tr>
+                            <th>Donor Name:</th>
+                            <td>{{ donation.donor_name }}</td>
+                        </tr>
+                        <tr>
+                            <th>Email:</th>
+                            <td>{{ donation.donor_email }}</td>
+                        </tr>
+                    </table>
+
+                    {% if bank_method %}
+                    <div class="mt-4">
+                        <h5 class="mb-3">Transfer to This Bank Account</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <table class="table table-borderless mb-0">
+                                    <tr>
+                                        <th width="30%">Bank Name:</th>
+                                        <td><strong>{{ bank_method.bank_name }}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Account Name:</th>
+                                        <td><strong>{{ bank_method.account_name }}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Account Number:</th>
+                                        <td><strong class="text-primary fs-5">{{ bank_method.account_number }}</strong></td>
+                                    </tr>
+                                    {% if bank_method.routing_number %}
+                                    <tr>
+                                        <th>Routing Number:</th>
+                                        <td><strong>{{ bank_method.routing_number }}</strong></td>
+                                    </tr>
+                                    {% endif %}
+                                    {% if bank_method.bank_address %}
+                                    <tr>
+                                        <th>Bank Address:</th>
+                                        <td>{{ bank_method.bank_address }}</td>
+                                    </tr>
+                                    {% endif %}
+                                </table>
+                            </div>
+                        </div>
+
+                        {% if bank_method.details %}
+                        <div class="alert alert-warning mt-3">
+                            <strong>Additional Instructions:</strong><br>
+                            {{ bank_method.details }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        No bank account information is currently available. Please contact the admin.
+                    </div>
+                    {% endif %}
+
+                    <div class="mt-4 p-3 bg-warning bg-opacity-10 rounded">
+                        <h6 class="fw-bold"><i class="bi bi-exclamation-circle"></i> Important Instructions:</h6>
+                        <ol class="mb-0">
+                            <li>Please include the donation reference <strong>DON-{{ donation.id }}</strong> in your transfer description</li>
+                            <li>Once you complete the transfer, take a screenshot or save the transaction receipt</li>
+                            <li>Your donation will be marked as "Pending" until our admin verifies the transfer</li>
+                            <li>You'll receive a confirmation email once your donation is verified</li>
+                        </ol>
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <a href="{{ url_for('main.campaign_detail', id=donation.campaign_id) }}" class="btn btn-outline-primary">
+                            <i class="bi bi-arrow-left"></i> Back to Campaign
+                        </a>
+                        <a href="{{ url_for('main.index') }}" class="btn btn-primary">
+                            <i class="bi bi-house"></i> Go to Home
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
