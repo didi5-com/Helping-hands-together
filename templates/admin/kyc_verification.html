@@ -1,0 +1,75 @@
+
+{% extends "base.html" %}
+
+{% block title %}KYC Verification - Admin{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <h2 class="mb-4">KYC Verification</h2>
+    
+    <ul class="nav nav-tabs mb-4" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" data-bs-toggle="tab" href="#pending">Pending ({{ pending|length }})</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#verified">Verified</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#rejected">Rejected</a>
+        </li>
+    </ul>
+    
+    <div class="tab-content">
+        <div id="pending" class="tab-pane fade show active">
+            {% if pending %}
+                {% for kyc in pending %}
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h5>{{ kyc.user.name }} ({{ kyc.user.email }})</h5>
+                                <p><strong>ID Type:</strong> {{ kyc.id_type }}</p>
+                                <p><strong>Submitted:</strong> {{ kyc.submitted_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                                <a href="{{ kyc.document_path }}" target="_blank" class="btn btn-sm btn-info">View Document</a>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <form method="POST" action="{{ url_for('admin.verify_kyc', id=kyc.id) }}" class="d-inline">
+                                    <input type="hidden" name="action" value="approve">
+                                    <button type="submit" class="btn btn-success">Approve</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('admin.verify_kyc', id=kyc.id) }}" class="d-inline">
+                                    <input type="hidden" name="action" value="reject">
+                                    <button type="submit" class="btn btn-danger">Reject</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No pending KYC verifications</p>
+            {% endif %}
+        </div>
+        
+        <div id="verified" class="tab-pane fade">
+            {% for kyc in verified %}
+            <div class="card mb-2">
+                <div class="card-body">
+                    <strong>{{ kyc.user.name }}</strong> - Verified on {{ kyc.verified_at.strftime('%B %d, %Y') }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div id="rejected" class="tab-pane fade">
+            {% for kyc in rejected %}
+            <div class="card mb-2">
+                <div class="card-body">
+                    <strong>{{ kyc.user.name }}</strong> - Rejected on {{ kyc.submitted_at.strftime('%B %d, %Y') }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

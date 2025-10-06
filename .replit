@@ -17,3 +17,24 @@ externalPort = 80
 
 [agent]
 expertMode = true
+
+[workflows]
+runButton = "Run Development Server"
+
+[[workflows.workflow]]
+name = "Setup Database"
+author = 48355483
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python init_db.py"
+
+[[workflows.workflow]]
+name = "Run Development Server"
+author = 48355483
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"

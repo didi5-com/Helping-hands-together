@@ -1,0 +1,105 @@
+
+{% extends "base.html" %}
+
+{% block title %}{{ campaign.title }} - Helping Hand Together{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <div class="col-lg-8">
+            {% if campaign.image %}
+            <img src="{{ campaign.image }}" class="img-fluid rounded mb-4" alt="{{ campaign.title }}">
+            {% endif %}
+            
+            <h1 class="mb-3">{{ campaign.title }}</h1>
+            
+            <div class="d-flex gap-3 mb-4 text-muted">
+                <span><i class="bi bi-person"></i> {{ campaign.owner.name }}</span>
+                <span><i class="bi bi-geo-alt"></i> {{ campaign.location }}</span>
+                <span><i class="bi bi-calendar"></i> {{ campaign.created_at.strftime('%B %d, %Y') }}</span>
+            </div>
+            
+            <div class="mb-4">
+                <h4>Raised: ${{ "%.2f"|format(campaign.raised_amount) }} of ${{ "%.2f"|format(campaign.goal_amount) }}</h4>
+                <div class="progress mb-2" style="height: 20px;">
+                    <div class="progress-bar bg-success" role="progressbar" style="width: {{ campaign.progress_percentage() }}%">
+                        {{ campaign.progress_percentage() }}%
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h3>Campaign Story</h3>
+                    <p class="lead">{{ campaign.description }}</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="mb-3">Recent Donations</h4>
+                    {% if recent_donations %}
+                        <div class="list-group list-group-flush">
+                            {% for donation in recent_donations %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between">
+                                    <strong>
+                                        {% if donation.anonymous %}
+                                            Anonymous
+                                        {% else %}
+                                            {{ donation.donor_name }}
+                                        {% endif %}
+                                    </strong>
+                                    <span class="text-success fw-bold">${{ "%.2f"|format(donation.amount) }}</span>
+                                </div>
+                                <small class="text-muted">{{ donation.created_at.strftime('%B %d, %Y at %I:%M %p') }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">Be the first to donate!</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card sticky-top" style="top: 100px;">
+                <div class="card-body">
+                    <h4 class="card-title mb-4">Make a Donation</h4>
+                    <form method="POST" action="{{ url_for('main.donate', campaign_id=campaign.id) }}">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-3">
+                            {{ form.donor_name.label(class="form-label") }}
+                            {{ form.donor_name(class="form-control") }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.donor_email.label(class="form-label") }}
+                            {{ form.donor_email(class="form-control") }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.amount.label(class="form-label") }}
+                            {{ form.amount(class="form-control") }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.payment_method.label(class="form-label") }}
+                            {{ form.payment_method(class="form-select") }}
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            {{ form.anonymous(class="form-check-input") }}
+                            {{ form.anonymous.label(class="form-check-label") }}
+                        </div>
+                        
+                        {{ form.submit(class="btn btn-primary w-100 btn-lg") }}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,88 @@
+
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Helping Hand Together{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4">
+    <h2 class="mb-4">Admin Dashboard</h2>
+    
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h3>{{ total_users }}</h3>
+                    <p>Total Users</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h3>{{ total_campaigns }}</h3>
+                    <p>Total Campaigns</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h3>{{ pending_kyc }}</h3>
+                    <p>Pending KYC</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h3>${{ "%.2f"|format(total_raised) }}</h3>
+                    <p>Total Raised</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Quick Actions</h5>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="{{ url_for('admin.kyc_verification') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-shield-check"></i> KYC Verification ({{ pending_kyc }} pending)
+                    </a>
+                    <a href="{{ url_for('admin.campaigns') }}?status=pending" class="list-group-item list-group-item-action">
+                        <i class="bi bi-flag"></i> Campaign Approvals ({{ pending_campaigns }} pending)
+                    </a>
+                    <a href="{{ url_for('admin.news') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-newspaper"></i> Manage News
+                    </a>
+                    <a href="{{ url_for('admin.payment_methods') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-credit-card"></i> Payment Methods
+                    </a>
+                    <a href="{{ url_for('admin.users') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-people"></i> Manage Users
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Recent Donations</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% for donation in recent_donations %}
+                    <div class="mb-2 pb-2 border-bottom">
+                        <strong>${{ "%.2f"|format(donation.amount) }}</strong> - {{ donation.donor_name }}<br>
+                        <small class="text-muted">{{ donation.campaign.title }}</small>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

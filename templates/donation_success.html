@@ -1,0 +1,18 @@
+
+{% extends "base.html" %}
+
+{% block title %}Thank You - Helping Hand Together{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 text-center">
+            <i class="bi bi-check-circle text-success" style="font-size: 5rem;"></i>
+            <h1 class="mt-4">Thank You!</h1>
+            <p class="lead">Your donation has been successfully processed.</p>
+            <p>You're making a real difference in someone's life. Thank you for your generosity!</p>
+            <a href="{{ url_for('main.index') }}" class="btn btn-primary mt-3">Return to Home</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

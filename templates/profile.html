@@ -1,0 +1,102 @@
+
+{% extends "base.html" %}
+
+{% block title %}My Profile - Helping Hand Together{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h2 class="mb-4">My Profile</h2>
+    
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-body text-center">
+                    <i class="bi bi-person-circle text-muted" style="font-size: 5rem;"></i>
+                    <h4 class="mt-3">{{ current_user.name }}</h4>
+                    <p class="text-muted">{{ current_user.email }}</p>
+                    {% if current_user.is_admin %}
+                        <span class="badge bg-danger">Admin</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">KYC Verification</h5>
+                    {% if current_user.kyc %}
+                        {% if current_user.kyc.status == 'verified' %}
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle"></i> Verified
+                            </div>
+                        {% elif current_user.kyc.status == 'pending' %}
+                            <div class="alert alert-warning">
+                                <i class="bi bi-clock"></i> Pending Review
+                            </div>
+                        {% else %}
+                            <div class="alert alert-danger">
+                                <i class="bi bi-x-circle"></i> Rejected - Please resubmit
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Not Submitted
+                        </div>
+                    {% endif %}
+                    
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ kyc_form.hidden_tag() }}
+                        
+                        <div class="mb-3">
+                            {{ kyc_form.id_type.label(class="form-label") }}
+                            {{ kyc_form.id_type(class="form-select") }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ kyc_form.document.label(class="form-label") }}
+                            {{ kyc_form.document(class="form-control") }}
+                        </div>
+                        
+                        {{ kyc_form.submit(class="btn btn-primary w-100") }}
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">My Campaigns</h5>
+                    <a href="{{ url_for('auth.create_campaign') }}" class="btn btn-primary btn-sm">Create New Campaign</a>
+                </div>
+                <div class="card-body">
+                    {% if campaigns %}
+                        <div class="list-group">
+                            {% for campaign in campaigns %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6>{{ campaign.title }}</h6>
+                                        <small class="text-muted">
+                                            ${{ "%.2f"|format(campaign.raised_amount) }} / ${{ "%.2f"|format(campaign.goal_amount) }}
+                                        </small>
+                                        {% if campaign.published %}
+                                            <span class="badge bg-success ms-2">Published</span>
+                                        {% else %}
+                                            <span class="badge bg-warning ms-2">Pending Approval</span>
+                                        {% endif %}
+                                    </div>
+                                    <a href="{{ url_for('main.campaign_detail', id=campaign.id) }}" class="btn btn-sm btn-outline-primary">View</a>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">You haven't created any campaigns yet.</p>
+                        <p>Complete KYC verification to create your first campaign!</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

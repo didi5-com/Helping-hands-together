@@ -1,0 +1,69 @@
+
+{% extends "base.html" %}
+
+{% block title %}All Campaigns - Helping Hand Together{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h2 class="mb-4">All Campaigns</h2>
+    
+    <div class="row g-4">
+        {% for campaign in campaigns.items %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card campaign-card h-100">
+                {% if campaign.image %}
+                <img src="{{ campaign.image }}" class="card-img-top" alt="{{ campaign.title }}" style="height: 200px; object-fit: cover;">
+                {% else %}
+                <div class="bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 200px;">
+                    <i class="bi bi-image" style="font-size: 3rem;"></i>
+                </div>
+                {% endif %}
+                <div class="card-body">
+                    <h5 class="card-title">{{ campaign.title }}</h5>
+                    <p class="card-text text-muted">{{ campaign.description[:100] }}...</p>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="text-muted">Raised: ${{ "%.2f"|format(campaign.raised_amount) }}</small>
+                            <small class="text-muted">Goal: ${{ "%.2f"|format(campaign.goal_amount) }}</small>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar" role="progressbar" style="width: {{ campaign.progress_percentage() }}%"></div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ campaign.location }}</small>
+                        <a href="{{ url_for('main.campaign_detail', id=campaign.id) }}" class="btn btn-primary btn-sm">Donate Now</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    {% if campaigns.pages > 1 %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if campaigns.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('main.campaigns', page=campaigns.prev_num) }}">Previous</a>
+            </li>
+            {% endif %}
+            
+            {% for page in campaigns.iter_pages() %}
+                {% if page %}
+                    <li class="page-item {% if page == campaigns.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('main.campaigns', page=page) }}">{{ page }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if campaigns.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('main.campaigns', page=campaigns.next_num) }}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}
