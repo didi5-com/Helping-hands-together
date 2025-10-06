@@ -1,0 +1,82 @@
+
+{% extends "base.html" %}
+
+{% block title %}Manage Users - Admin{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h2 class="mb-4">Manage Users</h2>
+    
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Email</th>
+                    <th>Name</th>
+                    <th>Admin</th>
+                    <th>Verified</th>
+                    <th>Joined</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users.items %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.email }}</td>
+                    <td>{{ user.name or 'N/A' }}</td>
+                    <td>
+                        {% if user.is_admin %}
+                        <span class="badge bg-success">Yes</span>
+                        {% else %}
+                        <span class="badge bg-secondary">No</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.email_verified %}
+                        <span class="badge bg-success">Yes</span>
+                        {% else %}
+                        <span class="badge bg-warning">No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.created_at.strftime('%Y-%m-%d') }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('admin.toggle_admin', id=user.id) }}" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-primary">Toggle Admin</button>
+                        </form>
+                        <a href="{{ url_for('admin.appreciate_user', user_id=user.id) }}" class="btn btn-sm btn-info">Appreciate</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    {% if users.pages > 1 %}
+    <nav>
+        <ul class="pagination">
+            {% if users.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.users', page=users.prev_num) }}">Previous</a>
+            </li>
+            {% endif %}
+            
+            {% for page in users.iter_pages() %}
+                {% if page %}
+                    <li class="page-item {% if page == users.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('admin.users', page=page) }}">{{ page }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if users.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.users', page=users.next_num) }}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

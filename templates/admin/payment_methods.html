@@ -1,0 +1,71 @@
+
+{% extends "base.html" %}
+
+{% block title %}Payment Methods - Admin{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h2 class="mb-4">Payment Methods</h2>
+    
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Add Payment Method</h5>
+            <form method="POST">
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    {{ form.name.label(class="form-label") }}
+                    {{ form.name(class="form-control") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.type.label(class="form-label") }}
+                    {{ form.type(class="form-control") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.details.label(class="form-label") }}
+                    {{ form.details(class="form-control", rows=3) }}
+                </div>
+                {{ form.submit(class="btn btn-primary") }}
+            </form>
+        </div>
+    </div>
+    
+    <h4 class="mb-3">Existing Payment Methods</h4>
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for method in methods %}
+                <tr>
+                    <td>{{ method.id }}</td>
+                    <td>{{ method.name }}</td>
+                    <td>{{ method.type }}</td>
+                    <td>
+                        {% if method.active %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('admin.toggle_payment_method', id=method.id) }}" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-primary">Toggle</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('admin.delete_payment_method', id=method.id) }}" style="display: inline;" onsubmit="return confirm('Are you sure?');">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

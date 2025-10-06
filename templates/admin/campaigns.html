@@ -1,0 +1,86 @@
+
+{% extends "base.html" %}
+
+{% block title %}Manage Campaigns - Admin{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h2 class="mb-4">Manage Campaigns</h2>
+    
+    <div class="mb-3">
+        <a href="{{ url_for('admin.campaigns', status='all') }}" class="btn btn-sm btn-outline-primary">All</a>
+        <a href="{{ url_for('admin.campaigns', status='pending') }}" class="btn btn-sm btn-outline-warning">Pending</a>
+        <a href="{{ url_for('admin.campaigns', status='published') }}" class="btn btn-sm btn-outline-success">Published</a>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Owner</th>
+                    <th>Goal</th>
+                    <th>Raised</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for campaign in campaigns.items %}
+                <tr>
+                    <td>{{ campaign.id }}</td>
+                    <td>{{ campaign.title }}</td>
+                    <td>{{ campaign.owner.email }}</td>
+                    <td>${{ "%.2f"|format(campaign.goal_amount) }}</td>
+                    <td>${{ "%.2f"|format(campaign.raised_amount) }}</td>
+                    <td>
+                        {% if campaign.published %}
+                        <span class="badge bg-success">Published</span>
+                        {% else %}
+                        <span class="badge bg-warning">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('admin.toggle_campaign_publish', id=campaign.id) }}" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-primary">
+                                {% if campaign.published %}Unpublish{% else %}Publish{% endif %}
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('admin.delete_campaign', id=campaign.id) }}" style="display: inline;" onsubmit="return confirm('Are you sure?');">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    {% if campaigns.pages > 1 %}
+    <nav>
+        <ul class="pagination">
+            {% if campaigns.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.campaigns', page=campaigns.prev_num, status=status) }}">Previous</a>
+            </li>
+            {% endif %}
+            
+            {% for page in campaigns.iter_pages() %}
+                {% if page %}
+                    <li class="page-item {% if page == campaigns.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('admin.campaigns', page=page, status=status) }}">{{ page }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if campaigns.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.campaigns', page=campaigns.next_num, status=status) }}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

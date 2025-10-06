@@ -1,0 +1,28 @@
+
+{% extends "base.html" %}
+
+{% block title %}Send Appreciation - Admin{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h2 class="mb-4">Send Appreciation to {{ user.name }}</h2>
+    
+    <div class="card">
+        <div class="card-body">
+            <form method="POST">
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    <label class="form-label">Recipient Email</label>
+                    <input type="text" class="form-control" value="{{ user.email }}" disabled>
+                </div>
+                <div class="mb-3">
+                    {{ form.message.label(class="form-label") }}
+                    {{ form.message(class="form-control", rows=5) }}
+                </div>
+                {{ form.submit(class="btn btn-primary") }}
+                <a href="{{ url_for('admin.users') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
