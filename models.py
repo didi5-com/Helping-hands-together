@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
@@ -71,7 +70,7 @@ class News(db.Model):
     image = db.Column(db.String(256))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     author_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    
+
     author = db.relationship('User', backref='news_posts')
     comments = db.relationship('Comment', backref='news', lazy='dynamic', cascade='all, delete-orphan')
 
