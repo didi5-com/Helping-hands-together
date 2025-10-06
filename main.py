@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import LoginManager, login_required, current_user
 from flask_mail import Mail, Message
@@ -46,11 +45,11 @@ main_bp = Blueprint('main', __name__)
 def index():
     campaigns = Campaign.query.filter_by(published=True).order_by(Campaign.created_at.desc()).limit(6).all()
     news = News.query.order_by(News.created_at.desc()).limit(3).all()
-    
+
     total_raised = db.session.query(db.func.sum(Campaign.raised_amount)).filter_by(published=True).scalar() or 0
     total_campaigns = Campaign.query.filter_by(published=True).count()
     total_donations = Donation.query.filter_by(status='completed').count()
-    
+
     return render_template('index.html', 
                          campaigns=campaigns, 
                          news=news,
@@ -63,16 +62,16 @@ def campaigns():
     page = request.args.get('page', 1, type=int)
     category = request.args.get('category')
     location = request.args.get('location')
-    
+
     query = Campaign.query.filter_by(published=True)
-    
+
     if category:
         query = query.filter_by(category=category)
     if location:
         query = query.filter_by(location=location)
-    
+
     campaigns = query.order_by(Campaign.created_at.desc()).paginate(page=page, per_page=12, error_out=False)
-    
+
     return render_template('campaigns.html', campaigns=campaigns)
 
 @main_bp.route('/campaign/<int:id>', methods=['GET', 'POST'])
@@ -81,16 +80,16 @@ def campaign_detail(id):
     if not campaign.published and (not current_user.is_authenticated or (current_user.id != campaign.owner_id and not current_user.is_admin)):
         flash('Campaign not found', 'danger')
         return redirect(url_for('main.campaigns'))
-    
+
     form = DonationForm()
     payment_methods = PaymentMethod.query.filter_by(active=True).all()
     form.payment_method.choices = [(pm.type, pm.name) for pm in payment_methods]
-    
+
     recent_donations = Donation.query.filter_by(
         campaign_id=campaign.id, 
         status='completed'
     ).order_by(Donation.created_at.desc()).limit(10).all()
-    
+
     return render_template('campaign.html', 
                          campaign=campaign, 
                          form=form,
@@ -100,13 +99,13 @@ def campaign_detail(id):
 def donate(campaign_id):
     campaign = Campaign.query.get_or_404(campaign_id)
     form = DonationForm()
-    
+
     payment_methods = PaymentMethod.query.filter_by(active=True).all()
     form.payment_method.choices = [(pm.type, pm.name) for pm in payment_methods]
-    
+
     if form.validate_on_submit():
         from payments import get_payment_processor
-        
+
         donation = Donation(
             campaign_id=campaign_id,
             donor_email=form.donor_email.data,
@@ -118,10 +117,10 @@ def donate(campaign_id):
         )
         db.session.add(donation)
         db.session.commit()
-        
+
         # Process payment based on method
         payment_method = form.payment_method.data
-        
+
         if payment_method == 'paypal':
             processor = get_payment_processor('paypal')
             result = processor.create_order(
@@ -135,7 +134,7 @@ def donate(campaign_id):
                 return redirect(result['approval_url'])
             else:
                 flash('Payment initialization failed', 'danger')
-        
+
         elif payment_method == 'paystack':
             processor = get_payment_processor('paystack')
             result = processor.initialize_transaction(
@@ -150,7 +149,7 @@ def donate(campaign_id):
                 return redirect(result['authorization_url'])
             else:
                 flash('Payment initialization failed', 'danger')
-        
+
         elif payment_method == 'crypto':
             processor = get_payment_processor('crypto')
             result = processor.create_charge(
@@ -165,47 +164,47 @@ def donate(campaign_id):
                 return redirect(result['hosted_url'])
             else:
                 flash('Payment initialization failed', 'danger')
-        
+
         elif payment_method == 'bank':
             # For bank transfer, show instructions
             flash('Please complete your bank transfer. Admin will verify and confirm your donation.', 'info')
             return redirect(url_for('main.bank_transfer_instructions', donation_id=donation.id))
-    
+
     return redirect(url_for('main.campaign_detail', id=campaign_id))
 
 @main_bp.route('/paypal/success')
 def paypal_success():
     donation_id = request.args.get('donation_id')
     token = request.args.get('token')
-    
+
     if donation_id and token:
         from payments import PayPalPayment
         donation = Donation.query.get(donation_id)
         if donation:
             processor = PayPalPayment()
             result = processor.capture_order(token)
-            
+
             if 'error' not in result and result.get('status') == 'COMPLETED':
                 donation.status = 'completed'
                 campaign = donation.campaign
                 campaign.raised_amount += donation.amount
                 db.session.commit()
-                
+
                 flash('Thank you for your donation!', 'success')
                 return redirect(url_for('main.donation_success'))
-    
+
     flash('Payment verification failed', 'danger')
     return redirect(url_for('main.index'))
 
 @main_bp.route('/paystack/callback')
 def paystack_callback():
     reference = request.args.get('reference')
-    
+
     if reference:
         from payments import PaystackPayment
         processor = PaystackPayment()
         result = processor.verify_transaction(reference)
-        
+
         if result.get('status') == 'success':
             donation = Donation.query.filter_by(transaction_id=reference).first()
             if donation and donation.status == 'pending':
@@ -213,10 +212,10 @@ def paystack_callback():
                 campaign = donation.campaign
                 campaign.raised_amount += donation.amount
                 db.session.commit()
-                
+
                 flash('Thank you for your donation!', 'success')
                 return redirect(url_for('main.donation_success'))
-    
+
     flash('Payment verification failed', 'danger')
     return redirect(url_for('main.index'))
 
@@ -249,7 +248,7 @@ def news_list():
 def news_detail(id):
     news = News.query.get_or_404(id)
     form = CommentForm()
-    
+
     if form.validate_on_submit() and current_user.is_authenticated:
         comment = Comment(
             news_id=news.id,
@@ -260,9 +259,9 @@ def news_detail(id):
         db.session.commit()
         flash('Comment posted!', 'success')
         return redirect(url_for('main.news_detail', id=id))
-    
+
     comments = Comment.query.filter_by(news_id=news.id).order_by(Comment.created_at.desc()).all()
-    
+
     return render_template('news_detail.html', news=news, form=form, comments=comments)
 
 @main_bp.route('/about')
@@ -279,19 +278,19 @@ app.register_blueprint(main_bp)
 @app.route('/webhooks/coinbase', methods=['POST'])
 def coinbase_webhook():
     from payments import CoinbaseCommercePayment
-    
+
     signature = request.headers.get('X-CC-Webhook-Signature')
     body = request.data
-    
+
     processor = CoinbaseCommercePayment()
     if processor.verify_webhook(signature, body):
         event = request.json
-        
+
         if event['type'] == 'charge:confirmed':
             charge_id = event['data']['id']
             metadata = event['data'].get('metadata', {})
             donation_id = metadata.get('donation_id')
-            
+
             if donation_id:
                 donation = Donation.query.get(donation_id)
                 if donation and donation.status == 'pending':
@@ -299,34 +298,34 @@ def coinbase_webhook():
                     campaign = donation.campaign
                     campaign.raised_amount += donation.amount
                     db.session.commit()
-        
+
         return jsonify({'status': 'success'}), 200
-    
+
     return jsonify({'status': 'invalid'}), 400
 
 @app.route('/webhooks/paystack', methods=['POST'])
 def paystack_webhook():
     from payments import PaystackPayment
-    
+
     signature = request.headers.get('X-Paystack-Signature')
     body = request.data
-    
+
     processor = PaystackPayment()
     if processor.verify_webhook(signature, body):
         event = request.json
-        
+
         if event['event'] == 'charge.success':
             reference = event['data']['reference']
             donation = Donation.query.filter_by(transaction_id=reference).first()
-            
+
             if donation and donation.status == 'pending':
                 donation.status = 'completed'
                 campaign = donation.campaign
                 campaign.raised_amount += donation.amount
                 db.session.commit()
-        
+
         return jsonify({'status': 'success'}), 200
-    
+
     return jsonify({'status': 'invalid'}), 400
 
 if __name__ == '__main__':
