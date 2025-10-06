@@ -53,7 +53,28 @@ class NewsForm(FlaskForm):
 class PaymentMethodForm(FlaskForm):
     name = StringField('Name', validators=[DataRequired(), Length(max=80)])
     type = SelectField('Type', choices=[('paypal', 'PayPal'), ('paystack', 'Paystack'), ('crypto', 'Cryptocurrency'), ('bank', 'Bank Transfer')], validators=[DataRequired()])
-    details = TextAreaField('Details', validators=[DataRequired()])
+    
+    # Crypto fields
+    crypto_wallet_address = StringField('Crypto Wallet Address', validators=[Optional(), Length(max=200)])
+    crypto_currency = SelectField('Cryptocurrency', choices=[('BTC', 'Bitcoin'), ('ETH', 'Ethereum'), ('USDT', 'Tether'), ('BNB', 'Binance Coin')], validators=[Optional()])
+    
+    # Bank transfer fields
+    bank_name = StringField('Bank Name', validators=[Optional(), Length(max=100)])
+    account_name = StringField('Account Name', validators=[Optional(), Length(max=100)])
+    account_number = StringField('Account Number', validators=[Optional(), Length(max=50)])
+    routing_number = StringField('Routing Number / SWIFT Code', validators=[Optional(), Length(max=50)])
+    bank_address = TextAreaField('Bank Address', validators=[Optional()])
+    
+    # PayPal fields
+    paypal_client_id = StringField('PayPal Client ID', validators=[Optional(), Length(max=200)])
+    paypal_secret = StringField('PayPal Secret Key', validators=[Optional(), Length(max=200)])
+    paypal_mode = SelectField('PayPal Mode', choices=[('sandbox', 'Sandbox'), ('live', 'Live')], validators=[Optional()])
+    
+    # Paystack fields
+    paystack_public_key = StringField('Paystack Public Key', validators=[Optional(), Length(max=200)])
+    paystack_secret_key = StringField('Paystack Secret Key', validators=[Optional(), Length(max=200)])
+    
+    details = TextAreaField('Additional Details/Instructions', validators=[Optional()])
     submit = SubmitField('Add Payment Method')
 
 class LocationForm(FlaskForm):

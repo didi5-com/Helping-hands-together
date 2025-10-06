@@ -6,10 +6,15 @@ import hashlib
 from flask import current_app
 
 class PayPalPayment:
-    def __init__(self):
-        self.client_id = os.getenv('PAYPAL_CLIENT_ID')
-        self.secret = os.getenv('PAYPAL_SECRET')
-        self.mode = os.getenv('PAYPAL_MODE', 'sandbox')
+    def __init__(self, payment_method=None):
+        if payment_method:
+            self.client_id = payment_method.paypal_client_id
+            self.secret = payment_method.paypal_secret
+            self.mode = payment_method.paypal_mode or 'sandbox'
+        else:
+            self.client_id = os.getenv('PAYPAL_CLIENT_ID')
+            self.secret = os.getenv('PAYPAL_SECRET')
+            self.mode = os.getenv('PAYPAL_MODE', 'sandbox')
         self.base_url = 'https://api-m.sandbox.paypal.com' if self.mode == 'sandbox' else 'https://api-m.paypal.com'
     
     def get_access_token(self):
@@ -80,8 +85,11 @@ class PayPalPayment:
 
 
 class PaystackPayment:
-    def __init__(self):
-        self.secret_key = os.getenv('PAYSTACK_SECRET_KEY')
+    def __init__(self, payment_method=None):
+        if payment_method:
+            self.secret_key = payment_method.paystack_secret_key
+        else:
+            self.secret_key = os.getenv('PAYSTACK_SECRET_KEY')
         self.base_url = 'https://api.paystack.co'
     
     def initialize_transaction(self, email, amount, reference, callback_url):

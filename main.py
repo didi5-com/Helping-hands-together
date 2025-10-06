@@ -235,8 +235,8 @@ def donation_cancel(donation_id):
 @main_bp.route('/bank-transfer/<int:donation_id>')
 def bank_transfer_instructions(donation_id):
     donation = Donation.query.get_or_404(donation_id)
-    bank_methods = PaymentMethod.query.filter_by(type='bank', active=True).all()
-    return render_template('bank_transfer.html', donation=donation, bank_methods=bank_methods)
+    bank_method = PaymentMethod.query.filter_by(type='bank', active=True).first()
+    return render_template('bank_transfer.html', donation=donation, bank_method=bank_method)
 
 @main_bp.route('/news')
 def news_list():

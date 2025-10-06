@@ -10,19 +10,98 @@
     <div class="card mb-4">
         <div class="card-body">
             <h5 class="card-title">Add Payment Method</h5>
-            <form method="POST">
+            <form method="POST" id="paymentMethodForm">
                 {{ form.hidden_tag() }}
-                <div class="mb-3">
-                    {{ form.name.label(class="form-label") }}
-                    {{ form.name(class="form-control") }}
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.name.label(class="form-label") }}
+                        {{ form.name(class="form-control") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ form.type.label(class="form-label") }}
+                        {{ form.type(class="form-control", id="paymentType") }}
+                    </div>
                 </div>
-                <div class="mb-3">
-                    {{ form.type.label(class="form-label") }}
-                    {{ form.type(class="form-control") }}
+                
+                <!-- Crypto Fields -->
+                <div id="cryptoFields" class="payment-fields" style="display:none;">
+                    <h6 class="text-primary mt-3">Cryptocurrency Details</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.crypto_currency.label(class="form-label") }}
+                            {{ form.crypto_currency(class="form-control") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.crypto_wallet_address.label(class="form-label") }}
+                            {{ form.crypto_wallet_address(class="form-control", placeholder="Enter wallet address") }}
+                        </div>
+                    </div>
                 </div>
+                
+                <!-- Bank Transfer Fields -->
+                <div id="bankFields" class="payment-fields" style="display:none;">
+                    <h6 class="text-primary mt-3">Bank Transfer Details</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.bank_name.label(class="form-label") }}
+                            {{ form.bank_name(class="form-control", placeholder="e.g., Chase Bank") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.account_name.label(class="form-label") }}
+                            {{ form.account_name(class="form-control", placeholder="Account holder name") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.account_number.label(class="form-label") }}
+                            {{ form.account_number(class="form-control", placeholder="Account number") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.routing_number.label(class="form-label") }}
+                            {{ form.routing_number(class="form-control", placeholder="Routing/SWIFT code") }}
+                        </div>
+                        <div class="col-12 mb-3">
+                            {{ form.bank_address.label(class="form-label") }}
+                            {{ form.bank_address(class="form-control", rows=2, placeholder="Bank branch address") }}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- PayPal Fields -->
+                <div id="paypalFields" class="payment-fields" style="display:none;">
+                    <h6 class="text-primary mt-3">PayPal Configuration</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.paypal_client_id.label(class="form-label") }}
+                            {{ form.paypal_client_id(class="form-control", placeholder="PayPal Client ID") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.paypal_secret.label(class="form-label") }}
+                            {{ form.paypal_secret(class="form-control", placeholder="PayPal Secret Key") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.paypal_mode.label(class="form-label") }}
+                            {{ form.paypal_mode(class="form-control") }}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Paystack Fields -->
+                <div id="paystackFields" class="payment-fields" style="display:none;">
+                    <h6 class="text-primary mt-3">Paystack Configuration</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.paystack_public_key.label(class="form-label") }}
+                            {{ form.paystack_public_key(class="form-control", placeholder="Paystack Public Key") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.paystack_secret_key.label(class="form-label") }}
+                            {{ form.paystack_secret_key(class="form-control", placeholder="Paystack Secret Key") }}
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="mb-3">
                     {{ form.details.label(class="form-label") }}
-                    {{ form.details(class="form-control", rows=3) }}
+                    {{ form.details(class="form-control", rows=3, placeholder="Additional instructions for users") }}
                 </div>
                 {{ form.submit(class="btn btn-primary") }}
             </form>
@@ -37,6 +116,7 @@
                     <th>ID</th>
                     <th>Name</th>
                     <th>Type</th>
+                    <th>Configuration</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -46,7 +126,18 @@
                 <tr>
                     <td>{{ method.id }}</td>
                     <td>{{ method.name }}</td>
-                    <td>{{ method.type }}</td>
+                    <td><span class="badge bg-info">{{ method.type }}</span></td>
+                    <td>
+                        {% if method.type == 'crypto' %}
+                            <small>{{ method.crypto_currency }}: {{ method.crypto_wallet_address[:20] }}...</small>
+                        {% elif method.type == 'bank' %}
+                            <small>{{ method.bank_name }} - {{ method.account_number }}</small>
+                        {% elif method.type == 'paypal' %}
+                            <small>Mode: {{ method.paypal_mode }}</small>
+                        {% elif method.type == 'paystack' %}
+                            <small>Configured</small>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if method.active %}
                         <span class="badge bg-success">Active</span>
@@ -68,4 +159,28 @@
         </table>
     </div>
 </div>
+
+<script>
+document.getElementById('paymentType').addEventListener('change', function() {
+    // Hide all payment fields
+    document.querySelectorAll('.payment-fields').forEach(function(el) {
+        el.style.display = 'none';
+    });
+    
+    // Show relevant fields based on selection
+    const type = this.value;
+    if (type === 'crypto') {
+        document.getElementById('cryptoFields').style.display = 'block';
+    } else if (type === 'bank') {
+        document.getElementById('bankFields').style.display = 'block';
+    } else if (type === 'paypal') {
+        document.getElementById('paypalFields').style.display = 'block';
+    } else if (type === 'paystack') {
+        document.getElementById('paystackFields').style.display = 'block';
+    }
+});
+
+// Trigger on page load if a type is already selected
+document.getElementById('paymentType').dispatchEvent(new Event('change'));
+</script>
 {% endblock %}

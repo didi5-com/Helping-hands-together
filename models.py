@@ -69,6 +69,27 @@ class PaymentMethod(db.Model):
     name = db.Column(db.String(100), nullable=False)
     type = db.Column(db.String(50), nullable=False)  # paypal, paystack, crypto, bank
     details = db.Column(db.Text)
+    
+    # Crypto fields
+    crypto_wallet_address = db.Column(db.String(200))
+    crypto_currency = db.Column(db.String(20))
+    
+    # Bank transfer fields
+    bank_name = db.Column(db.String(100))
+    account_name = db.Column(db.String(100))
+    account_number = db.Column(db.String(50))
+    routing_number = db.Column(db.String(50))
+    bank_address = db.Column(db.Text)
+    
+    # PayPal fields
+    paypal_client_id = db.Column(db.String(200))
+    paypal_secret = db.Column(db.String(200))
+    paypal_mode = db.Column(db.String(20))
+    
+    # Paystack fields
+    paystack_public_key = db.Column(db.String(200))
+    paystack_secret_key = db.Column(db.String(200))
+    
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

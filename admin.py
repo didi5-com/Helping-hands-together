@@ -183,9 +183,28 @@ def payment_methods():
             type=form.type.data,
             details=form.details.data
         )
+        
+        # Store type-specific fields
+        if form.type.data == 'crypto':
+            pm.crypto_wallet_address = form.crypto_wallet_address.data
+            pm.crypto_currency = form.crypto_currency.data
+        elif form.type.data == 'bank':
+            pm.bank_name = form.bank_name.data
+            pm.account_name = form.account_name.data
+            pm.account_number = form.account_number.data
+            pm.routing_number = form.routing_number.data
+            pm.bank_address = form.bank_address.data
+        elif form.type.data == 'paypal':
+            pm.paypal_client_id = form.paypal_client_id.data
+            pm.paypal_secret = form.paypal_secret.data
+            pm.paypal_mode = form.paypal_mode.data
+        elif form.type.data == 'paystack':
+            pm.paystack_public_key = form.paystack_public_key.data
+            pm.paystack_secret_key = form.paystack_secret_key.data
+        
         db.session.add(pm)
         db.session.commit()
-        flash('Payment method added', 'success')
+        flash('Payment method added successfully!', 'success')
         return redirect(url_for('admin.payment_methods'))
     
     methods = PaymentMethod.query.all()
