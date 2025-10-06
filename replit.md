@@ -24,6 +24,10 @@ The application follows a traditional Flask MVC architecture with Blueprint-base
 - Fixed missing `bank_transfer.html` template causing 500 errors
 - Fixed variable naming consistency in bank transfer route
 - Improved error handling in payment processors
+- **Image Upload Display Fix** (October 6, 2025): Resolved critical issue where uploaded images for campaigns and news were not displaying. The database fields use `image_path` but code was incorrectly using `image`. Fixed all occurrences in:
+  - `auth.py`: Campaign image upload (line 133)
+  - `admin.py`: News image upload (line 157)
+  - Templates: `campaign.html`, `campaigns.html`, `index.html`, `news_list.html`, `news_detail.html`
 
 ## User Preferences
 
