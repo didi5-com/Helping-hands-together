@@ -1,0 +1,561 @@
+# Helping Hand Together — Flask Crowdfunding Starter
+
+**What this contains (summary)**
+
+This repository is a starter, production-minded Flask application for a charity crowdfunding site called **Helping Hand Together**. It includes:
+
+* Flask app structure (blueprints for auth, main, admin)
+* SQLAlchemy models: `User`, `Campaign`, `Donation`, `KYC`, `News`, `Comment`, `PaymentMethod`
+* Flask-Login for user sessions
+* File upload handling for images (campaign images, profile pics)
+* KYC verification workflow (upload documents & status)
+* Admin panel to manage users, campaigns, locations, payment methods
+* Donation endpoints with placeholders for PayPal, Paystack, Crypto (Coinbase Commerce) and Bank Transfer handling
+* Flask-Mail integration for appreciation / notification emails via SMTP
+* Starter Bootstrap templates and static assets
+* `requirements.txt` and `.env.example`
+
+> ⚠️ This is a **starter** — payment gateway logic contains placeholders and examples. For live payments you must install and configure the official SDKs, secure your webhooks with signatures, and comply with PCI & local regulations.
+
+---
+
+## Project tree
+
+```
+helping-hand-together/
+├─ app.py
+├─ config.py
+├─ requirements.txt
+├─ .env.example
+├─ models.py
+├─ forms.py
+├─ auth.py
+├─ admin.py
+├─ payments.py
+├─ templates/
+│  ├─ base.html
+│  ├─ index.html
+│  ├─ campaign.html
+│  ├─ create_campaign.html
+│  ├─ login.html
+│  ├─ register.html
+│  ├─ profile.html
+│  ├─ admin_dashboard.html
+│  └─ ...
+├─ static/
+│  ├─ css/
+│  ├─ js/
+│  └─ uploads/
+└─ migrations/
+```
+
+---
+
+## How to use
+
+1. Create virtualenv and install requirements
+
+```bash
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+```
+
+2. Copy `.env.example` to `.env` and fill values (SECRET_KEY, DB, SMTP, payment keys)
+
+3. Initialize DB & run
+
+```bash
+flask db init
+flask db migrate -m "init"
+flask db upgrade
+flask run
+```
+
+---
+
+## Key files (full code included below)
+
+### `requirements.txt`
+
+```
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.3
+Flask-Migrate==4.0.4
+Flask-Login==0.6.3
+Flask-WTF==1.1.1
+email-validator==1.3.1
+python-dotenv==1.0.0
+Flask-Mail==0.9.1
+Werkzeug==2.3.7
+Pillow==10.0.1
+requests==2.31.0
+```
+
+---
+
+### `.env.example`
+
+```
+FLASK_APP=app.py
+FLASK_ENV=development
+SECRET_KEY=replace_me_with_a_strong_key
+SQLALCHEMY_DATABASE_URI=sqlite:///hht.db
+MAIL_SERVER=smtp.example.com
+MAIL_PORT=587
+MAIL_USE_TLS=True
+MAIL_USERNAME=you@example.com
+MAIL_PASSWORD=supersecret
+PAYPAL_CLIENT_ID=
+PAYPAL_SECRET=
+PAYSTACK_SECRET=
+COINBASE_API_KEY=
+ADMIN_EMAIL=admin@example.com
+```
+
+---
+
+### `config.py`
+
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class Config:
+    SECRET_KEY = os.getenv('SECRET_KEY') or 'dev'
+    SQLALCHEMY_DATABASE_URI = os.getenv('SQLALCHEMY_DATABASE_URI') or 'sqlite:///hht.db'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Mail
+    MAIL_SERVER = os.getenv('MAIL_SERVER')
+    MAIL_PORT = int(os.getenv('MAIL_PORT') or 25)
+    MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True') == 'True'
+    MAIL_USERNAME = os.getenv('MAIL_USERNAME')
+    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
+    MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER') or os.getenv('MAIL_USERNAME')
+
+    # Payment keys (placeholders)
+    PAYPAL_CLIENT_ID = os.getenv('PAYPAL_CLIENT_ID')
+    PAYPAL_SECRET = os.getenv('PAYPAL_SECRET')
+    PAYSTACK_SECRET = os.getenv('PAYSTACK_SECRET')
+    COINBASE_API_KEY = os.getenv('COINBASE_API_KEY')
+
+    UPLOAD_FOLDER = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static', 'uploads')
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB
+```
+
+---
+
+### `app.py` (entrypoint)
+
+```python
+from flask import Flask
+from config import Config
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from flask_login import LoginManager
+from flask_mail import Mail
+import os
+
+app = Flask(__name__)
+app.config.from_object(Config)
+
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+login = LoginManager(app)
+login.login_view = 'auth.login'
+mail = Mail(app)
+
+# Ensure upload folder exists
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# Blueprints
+from auth import bp as auth_bp
+from admin import bp as admin_bp
+from models import User, Campaign, Donation, News, Comment
+
+app.register_blueprint(auth_bp, url_prefix='/auth')
+app.register_blueprint(admin_bp, url_prefix='/admin')
+
+from flask import render_template
+
+@app.route('/')
+def index():
+    campaigns = Campaign.query.filter_by(published=True).order_by(Campaign.created_at.desc()).all()
+    news = News.query.order_by(News.created_at.desc()).limit(5).all()
+    return render_template('index.html', campaigns=campaigns, news=news)
+
+if __name__ == '__main__':
+    app.run(debug=True)
+```
+
+---
+
+### `models.py`
+
+```python
+from app import db, login
+from datetime import datetime
+from flask_login import UserMixin
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    name = db.Column(db.String(120))
+    is_admin = db.Column(db.Boolean, default=False)
+    profile_image = db.Column(db.String(256))
+
+    kyc = db.relationship('KYC', backref='user', uselist=False)
+    campaigns = db.relationship('Campaign', backref='owner', lazy='dynamic')
+
+    def __repr__(self):
+        return f'<User {self.email}>'
+
+@login.user_loader
+def load_user(id):
+    return User.query.get(int(id))
+
+class KYC(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    document_path = db.Column(db.String(256))
+    status = db.Column(db.String(32), default='pending')  # pending/verified/rejected
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Campaign(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    goal_amount = db.Column(db.Float, default=0.0)
+    raised_amount = db.Column(db.Float, default=0.0)
+    image = db.Column(db.String(256))
+    published = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    location = db.Column(db.String(120))
+
+    donations = db.relationship('Donation', backref='campaign', lazy='dynamic')
+
+class Donation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaign.id'))
+    donor_email = db.Column(db.String(120))
+    amount = db.Column(db.Float)
+    payment_method = db.Column(db.String(64))
+    status = db.Column(db.String(32), default='pending')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class News(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200))
+    content = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    author_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    news_id = db.Column(db.Integer, db.ForeignKey('news.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    content = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PaymentMethod(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80))
+    type = db.Column(db.String(40))  # paypal/paysack/crypto/bank
+    details = db.Column(db.Text)  # JSON or plain text (e.g., account info)
+    active = db.Column(db.Boolean, default=True)
+```
+
+---
+
+### `auth.py` (blueprint)
+
+```python
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
+from app import db
+from models import User, KYC
+from forms import LoginForm, RegistrationForm, KYCForm
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import login_user, logout_user, login_required, current_user
+from werkzeug.utils import secure_filename
+import os
+
+bp = Blueprint('auth', __name__, template_folder='templates')
+
+ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'pdf'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXT
+
+@bp.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        if User.query.filter_by(email=form.email.data).first():
+            flash('Email already registered')
+            return redirect(url_for('auth.register'))
+        user = User(email=form.email.data, name=form.name.data,
+                    password_hash=generate_password_hash(form.password.data))
+        db.session.add(user)
+        db.session.commit()
+        flash('Registration Successful. Please login.')
+        return redirect(url_for('auth.login'))
+    return render_template('register.html', form=form)
+
+@bp.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and check_password_hash(user.password_hash, form.password.data):
+            login_user(user, remember=form.remember_me.data)
+            return redirect(url_for('index'))
+        flash('Invalid credentials')
+    return render_template('login.html', form=form)
+
+@bp.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
+
+@bp.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    form = KYCForm()
+    if form.validate_on_submit():
+        file = form.document.data
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            file.save(path)
+            if not current_user.kyc:
+                k = KYC(user_id=current_user.id, document_path=path)
+                db.session.add(k)
+            else:
+                current_user.kyc.document_path = path
+                current_user.kyc.status = 'pending'
+            db.session.commit()
+            flash('KYC submitted, awaiting verification')
+            return redirect(url_for('auth.profile'))
+    return render_template('profile.html', form=form)
+```
+
+---
+
+### `admin.py` (blueprint)
+
+```python
+from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask_login import login_required, current_user
+from app import db, mail
+from models import User, Campaign, KYC, News, PaymentMethod
+from flask_mail import Message
+
+bp = Blueprint('admin', __name__, template_folder='templates')
+
+def admin_required(fn):
+    from functools import wraps
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            flash('Admin access required')
+            return redirect(url_for('index'))
+        return fn(*args, **kwargs)
+    return wrapper
+
+@bp.route('/')
+@login_required
+@admin_required
+def dashboard():
+    users = User.query.all()
+    campaigns = Campaign.query.order_by(Campaign.created_at.desc()).all()
+    kycs = KYC.query.filter_by(status='pending').all()
+    return render_template('admin_dashboard.html', users=users, campaigns=campaigns, kycs=kycs)
+
+@bp.route('/kyc/verify/<int:kyc_id>', methods=['POST'])
+@login_required
+@admin_required
+def verify_kyc(kyc_id):
+    k = KYC.query.get_or_404(kyc_id)
+    action = request.form.get('action')
+    if action == 'approve':
+        k.status = 'verified'
+    else:
+        k.status = 'rejected'
+    db.session.commit()
+    flash('KYC updated')
+    return redirect(url_for('admin.dashboard'))
+
+@bp.route('/news/create', methods=['GET','POST'])
+@login_required
+@admin_required
+def create_news():
+    if request.method == 'POST':
+        title = request.form['title']
+        content = request.form['content']
+        n = News(title=title, content=content, author_id=current_user.id)
+        db.session.add(n)
+        db.session.commit()
+        flash('News posted')
+        return redirect(url_for('admin.dashboard'))
+    return render_template('create_news.html')
+
+@bp.route('/appreciate/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def appreciate(user_id):
+    user = User.query.get_or_404(user_id)
+    # send appreciation mail
+    msg = Message(subject='Appreciation from Helping Hand Together', recipients=[user.email])
+    msg.body = request.form.get('message', 'Thank you for your support!')
+    mail.send(msg)
+    flash('Appreciation email sent')
+    return redirect(url_for('admin.dashboard'))
+
+@bp.route('/payment-methods', methods=['GET','POST'])
+@login_required
+@admin_required
+def payment_methods():
+    if request.method == 'POST':
+        name = request.form['name']
+        type = request.form['type']
+        details = request.form['details']
+        pm = PaymentMethod(name=name, type=type, details=details)
+        db.session.add(pm)
+        db.session.commit()
+        flash('Payment method added')
+    methods = PaymentMethod.query.all()
+    return render_template('payment_methods.html', methods=methods)
+```
+
+---
+
+### `payments.py` (high-level handling & placeholders)
+
+```python
+# This file contains high-level functions for starting a payment.
+# IMPORTANT: Replace placeholders with official SDK/API usage and secure webhook handlers.
+
+from config import Config
+import requests
+
+PAYPAL_API = 'https://api.sandbox.paypal.com'  # sandbox for testing
+
+def create_paypal_order(amount, return_url, cancel_url):
+    # Placeholder: implement OAuth and order creation using PayPal REST API
+    return {'status': 'ok', 'redirect': 'https://www.sandbox.paypal.com/...'}
+
+def verify_paystack(txref):
+    # Placeholder: call Paystack verify endpoint
+    return {'status': 'success', 'amount': 100}
+
+def create_coinbase_charge(amount, name, description):
+    # Placeholder: use Coinbase Commerce API
+    return {'hosted_url': 'https://commerce.coinbase.com/checkout/...'}
+```
+
+---
+
+### `forms.py`
+
+```python
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, BooleanField, SubmitField, TextAreaField, FloatField, FileField
+from wtforms.validators import DataRequired, Email, Length
+from flask_wtf.file import FileAllowed, FileRequired
+
+class LoginForm(FlaskForm):
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    remember_me = BooleanField('Remember me')
+    submit = SubmitField('Login')
+
+class RegistrationForm(FlaskForm):
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    name = StringField('Full name', validators=[DataRequired(), Length(min=2, max=120)])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
+    submit = SubmitField('Register')
+
+class KYCForm(FlaskForm):
+    document = FileField('KYC Document', validators=[FileRequired(), FileAllowed(['jpg','png','pdf'])])
+    submit = SubmitField('Submit KYC')
+
+class CampaignForm(FlaskForm):
+    title = StringField('Title', validators=[DataRequired()])
+    description = TextAreaField('Description', validators=[DataRequired()])
+    goal_amount = FloatField('Goal amount', validators=[DataRequired()])
+    image = FileField('Campaign image', validators=[FileAllowed(['jpg','png'])])
+    submit = SubmitField('Create Campaign')
+```
+
+---
+
+### Templates (starter hints)
+
+Templates use Bootstrap 5. Each template includes `base.html` with navbar, flash messages and footer. `index.html` loops campaigns and news. `campaign.html` shows donation options and a donate form pointing to `payments` endpoints.
+
+---
+
+## Important Implementation Notes & Next Steps
+
+1. **Payment Gateways:** The starter contains hooks and placeholders. Integrate official SDKs:
+
+   * PayPal: use the PayPal REST SDK or direct HTTP with OAuth tokens and webhook verification.
+   * Paystack: use Paystack transaction initialization and verify endpoints; secure callbacks with secrets.
+   * Crypto: Coinbase Commerce or similar; create a hosted checkout and listen for webhook confirmations.
+   * Bank Transfer: provide bank details as a `PaymentMethod` record; require manual admin confirmation when payment is received.
+
+2. **KYC / PII handling:** Store documents securely, preferably off-server in a secure object storage (S3, GCS) with restricted access. GDPR/Local privacy rules may apply.
+
+3. **Email (Appreciation):** Use Flask-Mail linked to a proper SMTP account (or transactional email provider like SendGrid, Mailgun). Use templates for emails.
+
+4. **Images:** Simple `static/uploads` implementation included. For production, use cloud storage and a CDN.
+
+5. **Admin actions:** Approve campaigns before publishing. Admin can add/remove payment methods and manage locations.
+
+6. **Security:** Use CSRF protection (Flask-WTF gives this), validate file uploads, rate-limit sensitive endpoints, and use HTTPS.
+
+7. **Testing:** Add unit tests, payment simulation, and a staging environment.
+
+---
+
+## Want me to do one of the following next? (choose one)
+
+* Generate the **full codebase as a downloadable zip** (I will create and provide it here).
+* Produce **complete HTML templates** for key pages (`index`, `campaign`, `admin_dashboard`) included in the repo.
+* Implement **PayPal integration example** (sandbox) with working order creation + webhook handler.
+* Create a **deployment guide** for Render (or Heroku) with environment variables and setup steps.
+
+Tell me which one you want and I will create it in the project files.
+
+---
+
+## Additional Deliverables — Templates, PayPal (Sandbox) Integration, Deploy Guide & Images
+
+This section expands the starter with **full HTML templates** for `index`, `campaign`, and `admin_dashboard`, a working **PayPal sandbox example** (order creation + webhook handler), a **Render deployment guide** with all environment variables, and instructions + filenames for **image assets**.
+
+---
+
+### Full HTML templates (Bootstrap 5)
+
+Place the following files in `templates/`.
+
+#### `base.html`
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Helping Hand Together{% block title %}{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+```
