@@ -9,24 +9,29 @@ def init_database():
         db.create_all()
         
         # Check if admin exists
-        admin = User.query.filter_by(email='admin@example.com').first()
+        admin = User.query.filter_by(email='ikpedesire5@gmail.com').first()
         
         if not admin:
             admin = User(
-                email='admin@example.com',
+                email='ikpedesire5@gmail.com',
                 name='Admin User',
-                password_hash=generate_password_hash('admin123'),
+                password_hash=generate_password_hash('didi5566'),
                 is_admin=True,
                 email_verified=True
             )
             db.session.add(admin)
             db.session.commit()
             print("✓ Admin user created!")
-            print("  Email: admin@example.com")
-            print("  Password: admin123")
-            print("  Please change the password after first login!")
+            print("  Email: ikpedesire5@gmail.com")
+            print("  Password: didi5566")
         else:
-            print("✓ Admin user already exists")
+            # Update existing admin credentials
+            admin.email = 'ikpedesire5@gmail.com'
+            admin.password_hash = generate_password_hash('didi5566')
+            db.session.commit()
+            print("✓ Admin user credentials updated!")
+            print("  Email: ikpedesire5@gmail.com")
+            print("  Password: didi5566")
         
         print("✓ Database initialized successfully!")
 
