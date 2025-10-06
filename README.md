@@ -183,3 +183,4 @@ For issues or questions, contact support@helpinghandtogether.org
 ## License
 
 MIT License - See LICENSE file for details
+# Helping-hands-together
