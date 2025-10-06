@@ -328,9 +328,12 @@ def paystack_webhook():
 
     return jsonify({'status': 'invalid'}), 400
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    from models import db
+
     with app.app_context():
-        from models import db
         db.create_all()
-        print("✅ Database tables created successfully!")
-    app.run(host='0.0.0.0', port=5000)
+        print("✅ All database tables created successfully!")
+
+    app.run(host="0.0.0.0", port=5000)
+
