@@ -328,8 +328,8 @@ def paystack_webhook():
 
     return jsonify({'status': 'invalid'}), 400
 
-if __name__ == "__main__":
-    from models import db
+#if __name__ == "__main__":
+ #   from models import db
 
     with app.app_context():
         db.create_all()
