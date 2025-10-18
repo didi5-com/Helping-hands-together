@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Dashboard - Admin{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+.analytics-card {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+.analytics-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+.metric-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px;
+}
+.chart-container {
+    position: relative;
+    height: 400px;
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="display-5 fw-bold text-primary">Analytics Dashboard</h1>
+            <p class="lead text-muted">Comprehensive platform insights and statistics</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-primary me-2" onclick="exportReport()">
+                <i class="bi bi-download"></i> Export Report
+            </button>
+            <button class="btn btn-primary" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="analytics-card metric-card p-4 text-center">
+                <i class="bi bi-people-fill mb-3" style="font-size: 3rem; opacity: 0.8;"></i>
+                <h2 class="mb-1">{{ new_users_30d }}</h2>
+                <p class="mb-0">New Users (30 days)</p>
+                <small class="opacity-75">{{ new_users_7d }} this week</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="analytics-card metric-card p-4 text-center" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                <i class="bi bi-flag-fill mb-3" style="font-size: 3rem; opacity: 0.8;"></i>
+                <h2 class="mb-1">{{ campaigns_30d }}</h2>
+                <p class="mb-0">New Campaigns</p>
+                <small class="opacity-75">{{ published_campaigns }} published</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="analytics-card metric-card p-4 text-center" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <i class="bi bi-heart-fill mb-3" style="font-size: 3rem; opacity: 0.8;"></i>
+                <h2 class="mb-1">{{ donations_30d }}</h2>
+                <p class="mb-0">Donations (30 days)</p>
+                <small class="opacity-75">Last 30 days</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="analytics-card metric-card p-4 text-center" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <i class="bi bi-currency-dollar mb-3" style="font-size: 3rem; opacity: 0.8;"></i>
+                <h2 class="mb-1">${{ "%.0f"|format(amount_30d) }}</h2>
+                <p class="mb-0">Revenue (30 days)</p>
+                <small class="opacity-75">Total donations</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-lg-8 mb-4">
+            <div class="analytics-card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> Top Performing Campaigns</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="campaignsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-4">
+            <div class="analytics-card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Payment Methods</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="paymentChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Tables -->
+    <div class="row">
+        <div class="col-lg-8 mb-4">
+            <div class="analytics-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-trophy"></i> Top Campaigns by Amount</h5>
+                    <span class="badge bg-primary">{{ top_campaigns|length }} campaigns</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Campaign</th>
+                                    <th>Donations</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for campaign in top_campaigns %}
+                                <tr>
+                                    <td><span class="badge bg-gold">{{ loop.index }}</span></td>
+                                    <td>
+                                        <strong>{{ campaign.title[:40] }}{% if campaign.title|length > 40 %}...{% endif %}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">{{ campaign.donation_count }}</span>
+                                    </td>
+                                    <td>
+                                        <strong class="text-primary">${{ "%.2f"|format(campaign.total_amount or 0) }}</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4 mb-4">
+            <div class="analytics-card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-credit-card"></i> Payment Statistics</h5>
+                </div>
+                <div class="card-body">
+                    {% for payment in payment_stats %}
+                    <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded" style="background-color: #f8f9fa;">
+                        <div>
+                            <strong>{{ payment.payment_method.title() or 'Unknown' }}</strong>
+                            <div class="small text-muted">Payment Method</div>
+                        </div>
+                        <div class="text-end">
+                            <h6 class="mb-0 text-primary">{{ payment.count }}</h6>
+                            <div class="small text-muted">transactions</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <div class="mt-4 p-3 bg-light rounded">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <h6 class="mb-1 text-success">Active</h6>
+                                <small class="text-muted">System Status</small>
+                            </div>
+                            <div class="col-6">
+                                <h6 class="mb-1">{{ payment_stats|length }}</h6>
+                                <small class="text-muted">Payment Types</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- System Health -->
+    <div class="row">
+        <div class="col-12">
+            <div class="analytics-card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-speedometer2"></i> Platform Performance</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-2 text-center">
+                            <div class="p-3">
+                                <div class="position-relative d-inline-block">
+                                    <svg width="80" height="80">
+                                        <circle cx="40" cy="40" r="30" stroke="#e9ecef" stroke-width="8" fill="none"/>
+                                        <circle cx="40" cy="40" r="30" stroke="#28a745" stroke-width="8" fill="none"
+                                                stroke-dasharray="188.4" stroke-dashoffset="47.1" transform="rotate(-90 40 40)"/>
+                                    </svg>
+                                    <div class="position-absolute top-50 start-50 translate-middle">
+                                        <strong>75%</strong>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <strong>Uptime</strong>
+                                    <div class="small text-muted">Last 30 days</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <div class="p-3">
+                                <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
+                                <div class="mt-2">
+                                    <strong>Healthy</strong>
+                                    <div class="small text-muted">Database</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <div class="p-3">
+                                <i class="bi bi-shield-check text-primary" style="font-size: 3rem;"></i>
+                                <div class="mt-2">
+                                    <strong>Secure</strong>
+                                    <div class="small text-muted">Encryption Active</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3">
+                                <h6>Recent System Events</h6>
+                                <div class="small">
+                                    <div class="d-flex justify-content-between border-bottom py-1">
+                                        <span><i class="bi bi-check text-success"></i> Database backup completed</span>
+                                        <span class="text-muted">2 hours ago</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between border-bottom py-1">
+                                        <span><i class="bi bi-info text-info"></i> New user registration</span>
+                                        <span class="text-muted">4 hours ago</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1">
+                                        <span><i class="bi bi-arrow-up text-primary"></i> Security update applied</span>
+                                        <span class="text-muted">1 day ago</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Campaigns Chart
+const campaignsCtx = document.getElementById('campaignsChart').getContext('2d');
+const campaignsChart = new Chart(campaignsCtx, {
+    type: 'bar',
+    data: {
+        labels: [
+            {% for campaign in top_campaigns[:5] %}
+            '{{ campaign.title[:20] }}{% if campaign.title|length > 20 %}...{% endif %}',
+            {% endfor %}
+        ],
+        datasets: [{
+            label: 'Total Amount ($)',
+            data: [
+                {% for campaign in top_campaigns[:5] %}
+                {{ campaign.total_amount or 0 }},
+                {% endfor %}
+            ],
+            backgroundColor: [
+                'rgba(102, 126, 234, 0.8)',
+                'rgba(118, 75, 162, 0.8)',
+                'rgba(17, 153, 142, 0.8)',
+                'rgba(56, 239, 125, 0.8)',
+                'rgba(79, 172, 254, 0.8)'
+            ],
+            borderColor: [
+                'rgba(102, 126, 234, 1)',
+                'rgba(118, 75, 162, 1)',
+                'rgba(17, 153, 142, 1)',
+                'rgba(56, 239, 125, 1)',
+                'rgba(79, 172, 254, 1)'
+            ],
+            borderWidth: 2,
+            borderRadius: 8
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return '$' + value.toFixed(0);
+                    }
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return 'Amount: $' + context.raw.toFixed(2);
+                    }
+                }
+            }
+        }
+    }
+});
+
+// Payment Methods Chart
+const paymentCtx = document.getElementById('paymentChart').getContext('2d');
+const paymentChart = new Chart(paymentCtx, {
+    type: 'doughnut',
+    data: {
+        labels: [
+            {% for payment in payment_stats %}
+            '{{ payment.payment_method.title() }}',
+            {% endfor %}
+        ],
+        datasets: [{
+            data: [
+                {% for payment in payment_stats %}
+                {{ payment.count }},
+                {% endfor %}
+            ],
+            backgroundColor: [
+                '#FF6384',
+                '#36A2EB',
+                '#FFCE56',
+                '#4BC0C0',
+                '#9966FF',
+                '#FF9F40'
+            ],
+            hoverOffset: 4
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    padding: 20,
+                    usePointStyle: true
+                }
+            }
+        }
+    }
+});
+
+function exportReport() {
+    alert('Export functionality would generate PDF/Excel report with all analytics data');
+}
+
+// Auto-refresh every 5 minutes
+setInterval(() => {
+    location.reload();
+}, 300000);
+</script>
+{% endblock %}

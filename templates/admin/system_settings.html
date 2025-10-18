@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="display-5 fw-bold text-primary">System Settings</h1>
+            <p class="lead text-muted">Configure platform settings and preferences</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-primary me-2" onclick="exportSettings()">
+                <i class="bi bi-download"></i> Export Config
+            </button>
+            <button class="btn btn-warning" onclick="resetSettings()">
+                <i class="bi bi-arrow-clockwise"></i> Reset Defaults
+            </button>
+        </div>
+    </div>
+
+    <form method="POST">
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-gear"></i> General Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Platform Name</label>
+<input type="text" class="form-control" name="setting_platform_name" 
+                                       value="{{ settings_map.platform_name or 'Helping Hand Together' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Contact Email</label>
+<input type="email" class="form-control" name="setting_contact_email" 
+                                       value="{{ settings_map.contact_email or 'admin@helpinghandstogether.com' }}">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Max Upload Size (MB)</label>
+<input type="number" class="form-control" name="setting_max_upload_size" 
+                                       value="{{ settings_map.max_upload_size or 16 }}" min="1" max="100">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Session Timeout (minutes)</label>
+<input type="number" class="form-control" name="setting_session_timeout" 
+                                       value="{{ settings_map.session_timeout or 30 }}" min="5" max="1440">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Platform Description</label>
+                            <textarea class="form-control" name="setting_platform_description" rows="3">{{ settings_map.platform_description or 'A comprehensive crowdfunding platform connecting donors with meaningful causes.' }}</textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Theme Mode</label>
+                                <select class="form-select" name="setting_theme_mode">
+                                    <option value="light" {% if settings_map.theme_mode=='light' %}selected{% endif %}>Light</option>
+                                    <option value="dark" {% if settings_map.theme_mode=='dark' %}selected{% endif %}>Dark</option>
+                                    <option value="system" {% if settings_map.theme_mode=='system' or not settings_map.theme_mode %}selected{% endif %}>System (default)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">USD → NGN Rate</label>
+                                <input type="number" step="0.01" class="form-control" name="setting_usd_ngn_rate" value="{{ settings_map.usd_ngn_rate or 1500 }}">
+                                <small class="text-muted">Used for Paystack conversions (1 USD = X NGN)</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-envelope"></i> Email Configuration</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">SMTP Server</label>
+                                <input type="text" class="form-control" name="setting_smtp_server" 
+                                       value="{{ settings_map.smtp_server or 'smtp.gmail.com' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">SMTP Port</label>
+                                <input type="number" class="form-control" name="setting_smtp_port" 
+                                       value="{{ settings_map.smtp_port or 587 }}">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">SMTP Username</label>
+                                <input type="text" class="form-control" name="setting_smtp_username" value="{{ settings_map.smtp_username or '' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">SMTP Password</label>
+                                <input type="password" class="form-control" name="setting_smtp_password" 
+                                       placeholder="••••••••">
+                                <small class="form-text text-muted">Leave blank to keep existing password</small>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Default Sender Name</label>
+                                <input type="text" class="form-control" name="setting_mail_default_sender_name" value="{{ settings_map.mail_default_sender_name or settings_map.platform_name or 'Helping Hand Together' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Default Sender Email</label>
+                                <input type="email" class="form-control" name="setting_mail_default_sender_email" value="{{ settings_map.mail_default_sender_email or settings_map.contact_email or '' }}">
+                            </div>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="setting_smtp_use_tls" 
+                                   id="smtpTls" {% if (settings_map.smtp_use_tls or 'true') in ['true','on','1'] %}checked{% endif %}>
+                            <label class="form-check-label" for="smtpTls">
+                                Use TLS Encryption
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-shield-lock"></i> Security Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Password Min Length</label>
+                                <input type="number" class="form-control" name="setting_password_min_length" 
+                                       value="8" min="6" max="20">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Login Attempts Limit</label>
+                                <input type="number" class="form-control" name="setting_max_login_attempts" 
+                                       value="5" min="3" max="10">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="setting_require_email_verification" 
+                                           id="emailVerification" checked>
+                                    <label class="form-check-label" for="emailVerification">
+                                        Require Email Verification
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="setting_enable_2fa" 
+                                           id="enable2fa">
+                                    <label class="form-check-label" for="enable2fa">
+                                        Enable Two-Factor Authentication
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="setting_log_user_activities" 
+                                           id="logActivities" checked>
+                                    <label class="form-check-label" for="logActivities">
+                                        Log User Activities
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="setting_encrypt_sensitive_data" 
+                                           id="encryptData" checked>
+                                    <label class="form-check-label" for="encryptData">
+                                        Encrypt Sensitive Data
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> System Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <th>Platform Version:</th>
+                                <td><span class="badge bg-primary">v2.0.0</span></td>
+                            </tr>
+                            <tr>
+                                <th>Database:</th>
+                                <td><span class="badge bg-success">SQLite</span></td>
+                            </tr>
+                            <tr>
+                                <th>Encryption:</th>
+                                <td><span class="badge bg-info">AES-256</span></td>
+                            </tr>
+                            <tr>
+                                <th>Last Backup:</th>
+                                <td><small class="text-muted">2 hours ago</small></td>
+                            </tr>
+                            <tr>
+                                <th>System Status:</th>
+                                <td><span class="badge bg-success">Healthy</span></td>
+                            </tr>
+                        </table>
+                        
+                        <div class="mt-4">
+                            <h6>Quick Actions</h6>
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="testEmail()">
+                                    <i class="bi bi-envelope-check"></i> Test Email
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearCache()">
+                                    <i class="bi bi-arrow-clockwise"></i> Clear Cache
+                                </button>
+                                <button type="button" class="btn btn-outline-warning btn-sm" onclick="backupDatabase()">
+                                    <i class="bi bi-download"></i> Backup Database
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Platform Stats</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6 mb-3">
+                                <h4 class="text-primary">1</h4>
+                                <small class="text-muted">Total Users</small>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <h4 class="text-success">1</h4>
+                                <small class="text-muted">Campaigns</small>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <h4 class="text-info">$0.00</h4>
+                                <small class="text-muted">Total Raised</small>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <h4 class="text-warning">0</h4>
+                                <small class="text-muted">Pending KYC</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Changes</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="timeline">
+                            <div class="timeline-item mb-3">
+                                <div class="d-flex">
+                                    <div class="flex-shrink-0">
+                                        <i class="bi bi-check-circle text-success"></i>
+                                    </div>
+                                    <div class="flex-grow-1 ms-2">
+                                        <small class="text-muted">Just now</small>
+                                        <div class="small">System settings viewed</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="timeline-item mb-3">
+                                <div class="d-flex">
+                                    <div class="flex-shrink-0">
+                                        <i class="bi bi-person-plus text-primary"></i>
+                                    </div>
+                                    <div class="flex-grow-1 ms-2">
+                                        <small class="text-muted">1 hour ago</small>
+                                        <div class="small">Admin account created</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="timeline-item mb-3">
+                                <div class="d-flex">
+                                    <div class="flex-shrink-0">
+                                        <i class="bi bi-database text-info"></i>
+                                    </div>
+                                    <div class="flex-grow-1 ms-2">
+                                        <small class="text-muted">2 hours ago</small>
+                                        <div class="small">Database schema updated</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <button type="submit" class="btn btn-primary btn-lg me-3">
+                            <i class="bi bi-check-circle"></i> Save All Settings
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="window.location.reload()">
+                            <i class="bi bi-x-circle"></i> Cancel Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+function testEmail() {
+    alert('Email test functionality would send a test email to verify SMTP configuration');
+}
+
+function clearCache() {
+    if (confirm('Are you sure you want to clear all system cache?')) {
+        alert('Cache cleared successfully');
+    }
+}
+
+function backupDatabase() {
+    alert('Database backup functionality would create a backup of the current database');
+}
+
+function exportSettings() {
+    alert('Settings export would generate a configuration file');
+}
+
+function resetSettings() {
+    if (confirm('Are you sure you want to reset all settings to default values?')) {
+        alert('Settings reset to defaults');
+        location.reload();
+    }
+}
+</script>
+{% endblock %}

@@ -8,11 +8,27 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
-        :root {
+:root {
             --primary-color: #2563eb;
             --secondary-color: #10b981;
+            --bg-color: #ffffff;
+            --text-color: #111827;
+            --card-bg: #ffffff;
+            --card-border: rgba(0,0,0,0.1);
+            --nav-bg: #ffffff;
+            --footer-bg: #1f2937;
         }
+        .theme-dark {
+            --bg-color: #0b1220;
+            --text-color: #e5e7eb;
+            --card-bg: #111827;
+            --card-border: rgba(255,255,255,0.1);
+            --nav-bg: #0b1220;
+            --footer-bg: #0b1220;
+        }
+        body { background: var(--bg-color); color: var(--text-color); }
         .navbar {
+            background-color: var(--nav-bg) !important;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .hero-section {
@@ -20,9 +36,10 @@
             color: white;
             padding: 80px 0;
         }
-        .campaign-card {
+.campaign-card {
             transition: transform 0.3s;
-            border: none;
+            border: 1px solid var(--card-border);
+            background: var(--card-bg);
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         .campaign-card:hover {
@@ -32,11 +49,22 @@
         .progress {
             height: 10px;
         }
-        footer {
-            background-color: #1f2937;
+footer {
+            background-color: var(--footer-bg);
             color: white;
             padding: 40px 0 20px;
         }
+        .card { background: var(--card-bg); border: 1px solid var(--card-border); }
+        .modal-content { background: var(--card-bg); color: var(--text-color); }
+        .table { color: var(--text-color); }
+        .bg-light { background-color: rgba(0,0,0,0.03) !important; }
+        .theme-dark .bg-light { background-color: rgba(255,255,255,0.06) !important; }
+        .nav-link, .dropdown-item, .text-muted { color: var(--text-color) !important; opacity: 0.85; }
+        a { color: var(--text-color); opacity: 0.95; text-decoration: none; }
+        a:hover { opacity: 1; }
+        h1,h2,h3,h4,h5,h6, p, small, span, label { color: var(--text-color); }
+        .table thead th { color: var(--text-color); }
+        .list-group-item { background: var(--card-bg); color: var(--text-color); border-color: var(--card-border); }
         .btn-primary {
             background-color: var(--primary-color);
             border-color: var(--primary-color);
@@ -48,7 +76,7 @@
     </style>
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body class="{{ 'theme-dark' if theme_mode == 'dark' else ('theme-light' if theme_mode == 'light' else '') }}">
     <nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top">
         <div class="container">
             <a class="navbar-brand fw-bold" href="{{ url_for('main.index') }}">

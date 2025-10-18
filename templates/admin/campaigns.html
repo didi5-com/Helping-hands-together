@@ -33,7 +33,20 @@
                     <td>{{ campaign.title }}</td>
                     <td>{{ campaign.owner.email }}</td>
                     <td>${{ "%.2f"|format(campaign.goal_amount) }}</td>
-                    <td>${{ "%.2f"|format(campaign.raised_amount) }}</td>
+                    <td>
+                <form method="POST" 
+                    action="{{ url_for('admin.update_raised_amount', id=campaign.id) }}" 
+                    class="d-flex align-items-center" 
+                    style="gap:5px;">
+                    <input type="number" name="raised_amount" 
+                        value="{{ campaign.raised_amount }}" 
+                        step="0.01" min="0" 
+                        class="form-control form-control-sm" 
+                        style="width: 90px;">
+                    <button type="submit" class="btn btn-sm btn-outline-success">✔</button>
+                </form>
+                </td>
+
                     <td>
                         {% if campaign.published %}
                         <span class="badge bg-success">Published</span>

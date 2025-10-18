@@ -30,7 +30,8 @@
                                 <h5>{{ kyc.user.name }} ({{ kyc.user.email }})</h5>
                                 <p><strong>ID Type:</strong> {{ kyc.id_type }}</p>
                                 <p><strong>Submitted:</strong> {{ kyc.submitted_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
-                                <a href="{{ kyc.document_path }}" target="_blank" class="btn btn-sm btn-info">View Document</a>
+                                {% set display_path = kyc.document_path if kyc.document_path.startswith('/static') else kyc.document_path.replace(config['UPLOAD_FOLDER'], '/static/uploads') %}
+                                <a href="{{ display_path }}" target="_blank" class="btn btn-sm btn-info">View Document</a>
                             </div>
                             <div class="col-md-4 text-end">
                                 <form method="POST" action="{{ url_for('admin.verify_kyc', id=kyc.id) }}" class="d-inline">

@@ -1,16 +1,31 @@
-
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from flask_login import login_required, current_user
+from sqlalchemy import func
 from flask_mail import Message
 from functools import wraps
 from werkzeug.utils import secure_filename
-from models import db, User, Campaign, KYC, News, PaymentMethod, Location, Donation
+from models import db, User, Campaign, KYC, News, PaymentMethod, Location, Donation, UserActivity, Notification, AuditLog
 from forms import NewsForm, PaymentMethodForm, LocationForm, AppreciationForm
-import os
+from security_utils import security_manager, ActivityLogger, NotificationManager
 from datetime import datetime
+import os
+import requests
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
 
+# ------------------------------------------
+# Safe Coinbase Check (non-blocking)
+# ------------------------------------------
+try:
+    response = requests.get("https://api.commerce.coinbase.com", timeout=5)
+    print(f"✅ Coinbase API reachable: {response.status_code}")
+except requests.exceptions.RequestException:
+    print("⚠️ Coinbase API not reachable right now — continuing without it.")
+
+
+# ------------------------------------------
+# ADMIN ACCESS DECORATOR
+# ------------------------------------------
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -20,6 +35,10 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
+# ------------------------------------------
+# ADMIN DASHBOARD
+# ------------------------------------------
 @bp.route('/')
 @login_required
 @admin_required
@@ -30,20 +49,24 @@ def dashboard():
     pending_campaigns = Campaign.query.filter_by(published=False).count()
     total_donations = Donation.query.filter_by(status='completed').count()
     total_raised = db.session.query(db.func.sum(Donation.amount)).filter_by(status='completed').scalar() or 0
-    
-    recent_donations = Donation.query.order_by(Donation.created_at.desc()).limit(10).all()
-    recent_users = User.query.order_by(User.created_at.desc()).limit(10).all()
-    
-    return render_template('admin/dashboard.html',
-                         total_users=total_users,
-                         total_campaigns=total_campaigns,
-                         pending_kyc=pending_kyc,
-                         pending_campaigns=pending_campaigns,
-                         total_donations=total_donations,
-                         total_raised=total_raised,
-                         recent_donations=recent_donations,
-                         recent_users=recent_users)
 
+    recent_users = User.query.order_by(User.created_at.desc()).limit(10).all()
+    recent_donations = Donation.query.order_by(Donation.created_at.desc()).limit(10).all()
+
+    return render_template('admin/dashboard.html',
+                           total_users=total_users,
+                           total_campaigns=total_campaigns,
+                           pending_kyc=pending_kyc,
+                           pending_campaigns=pending_campaigns,
+                           total_donations=total_donations,
+                           total_raised=total_raised,
+                           recent_users=recent_users,
+                           recent_donations=recent_donations)
+
+
+# ------------------------------------------
+# USERS MANAGEMENT
+# ------------------------------------------
 @bp.route('/users')
 @login_required
 @admin_required
@@ -51,6 +74,7 @@ def users():
     page = request.args.get('page', 1, type=int)
     users = User.query.order_by(User.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
     return render_template('admin/users.html', users=users)
+
 
 @bp.route('/user/<int:id>/toggle-admin', methods=['POST'])
 @login_required
@@ -62,6 +86,10 @@ def toggle_admin(id):
     flash(f'User {user.name} admin status updated', 'success')
     return redirect(url_for('admin.users'))
 
+
+# ------------------------------------------
+# KYC VERIFICATION
+# ------------------------------------------
 @bp.route('/kyc-verification')
 @login_required
 @admin_required
@@ -69,11 +97,11 @@ def kyc_verification():
     pending = KYC.query.filter_by(status='pending').all()
     verified = KYC.query.filter_by(status='verified').order_by(KYC.verified_at.desc()).limit(20).all()
     rejected = KYC.query.filter_by(status='rejected').order_by(KYC.submitted_at.desc()).limit(20).all()
-    
-    return render_template('admin/kyc_verification.html', 
-                         pending=pending, 
-                         verified=verified,
-                         rejected=rejected)
+    return render_template('admin/kyc_verification.html',
+                           pending=pending,
+                           verified=verified,
+                           rejected=rejected)
+
 
 @bp.route('/kyc/<int:id>/verify', methods=['POST'])
 @login_required
@@ -81,7 +109,7 @@ def kyc_verification():
 def verify_kyc(id):
     kyc = KYC.query.get_or_404(id)
     action = request.form.get('action')
-    
+
     if action == 'approve':
         kyc.status = 'verified'
         kyc.verified_at = datetime.utcnow()
@@ -89,25 +117,30 @@ def verify_kyc(id):
     elif action == 'reject':
         kyc.status = 'rejected'
         flash(f'KYC for {kyc.user.name} rejected', 'warning')
-    
+
     db.session.commit()
     return redirect(url_for('admin.kyc_verification'))
 
+
+# ------------------------------------------
+# CAMPAIGN MANAGEMENT
+# ------------------------------------------
 @bp.route('/campaigns')
 @login_required
 @admin_required
 def campaigns():
     page = request.args.get('page', 1, type=int)
     status = request.args.get('status', 'all')
-    
+
     query = Campaign.query
     if status == 'pending':
         query = query.filter_by(published=False)
     elif status == 'published':
         query = query.filter_by(published=True)
-    
+
     campaigns = query.order_by(Campaign.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
     return render_template('admin/campaigns.html', campaigns=campaigns, status=status)
+
 
 @bp.route('/campaign/<int:id>/toggle-publish', methods=['POST'])
 @login_required
@@ -116,35 +149,49 @@ def toggle_campaign_publish(id):
     campaign = Campaign.query.get_or_404(id)
     campaign.published = not campaign.published
     db.session.commit()
-    
-    status = 'published' if campaign.published else 'unpublished'
-    flash(f'Campaign "{campaign.title}" {status}', 'success')
+    flash(f'Campaign "{campaign.title}" {"published" if campaign.published else "unpublished"}', 'success')
     return redirect(url_for('admin.campaigns'))
+
+
+@bp.route('/campaign/<int:id>/update-raised', methods=['POST'])
+@login_required
+@admin_required
+def update_raised_amount(id):
+    campaign = Campaign.query.get_or_404(id)
+    try:
+        new_amount = float(request.form.get('raised_amount'))
+        if new_amount < 0:
+            raise ValueError("Amount cannot be negative")
+        campaign.raised_amount = new_amount
+        db.session.commit()
+        flash(f'Updated raised amount for "{campaign.title}" to ${new_amount:.2f}', 'success')
+    except ValueError:
+        flash('Invalid amount entered. Please enter a valid number.', 'danger')
+    return redirect(url_for('admin.campaigns'))
+
 
 @bp.route('/campaign/<int:id>/delete', methods=['POST'])
 @login_required
 @admin_required
 def delete_campaign(id):
     campaign = Campaign.query.get_or_404(id)
-    title = campaign.title
     db.session.delete(campaign)
     db.session.commit()
-    flash(f'Campaign "{title}" deleted', 'success')
+    flash(f'Campaign "{campaign.title}" deleted', 'success')
     return redirect(url_for('admin.campaigns'))
 
+
+# ------------------------------------------
+# NEWS MANAGEMENT
+# ------------------------------------------
 @bp.route('/news', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def news():
     form = NewsForm()
-    
     if form.validate_on_submit():
-        news = News(
-            title=form.title.data,
-            content=form.content.data,
-            author_id=current_user.id
-        )
-        
+        news = News(title=form.title.data, content=form.content.data, author_id=current_user.id)
+
         if form.image.data:
             file = form.image.data
             filename = secure_filename(f"news_{datetime.utcnow().timestamp()}_{file.filename}")
@@ -152,14 +199,15 @@ def news():
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             file.save(filepath)
             news.image_path = f'/static/uploads/news/{filename}'
-        
+
         db.session.add(news)
         db.session.commit()
         flash('News published successfully!', 'success')
         return redirect(url_for('admin.news'))
-    
+
     all_news = News.query.order_by(News.created_at.desc()).all()
     return render_template('admin/news.html', form=form, news=all_news)
+
 
 @bp.route('/news/<int:id>/delete', methods=['POST'])
 @login_required
@@ -168,23 +216,26 @@ def delete_news(id):
     news = News.query.get_or_404(id)
     db.session.delete(news)
     db.session.commit()
-    flash('News deleted', 'success')
+    flash('News deleted successfully', 'success')
     return redirect(url_for('admin.news'))
 
+
+# ------------------------------------------
+# PAYMENT METHODS MANAGEMENT
+# ------------------------------------------
 @bp.route('/payment-methods', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def payment_methods():
     form = PaymentMethodForm()
-    
     if form.validate_on_submit():
         pm = PaymentMethod(
             name=form.name.data,
             type=form.type.data,
             details=form.details.data
         )
-        
-        # Store type-specific fields
+
+        # Handle specific fields based on type
         if form.type.data == 'crypto':
             pm.crypto_wallet_address = form.crypto_wallet_address.data
             pm.crypto_currency = form.crypto_currency.data
@@ -192,23 +243,21 @@ def payment_methods():
             pm.bank_name = form.bank_name.data
             pm.account_name = form.account_name.data
             pm.account_number = form.account_number.data
-            pm.routing_number = form.routing_number.data
-            pm.bank_address = form.bank_address.data
         elif form.type.data == 'paypal':
             pm.paypal_client_id = form.paypal_client_id.data
             pm.paypal_secret = form.paypal_secret.data
-            pm.paypal_mode = form.paypal_mode.data
         elif form.type.data == 'paystack':
             pm.paystack_public_key = form.paystack_public_key.data
             pm.paystack_secret_key = form.paystack_secret_key.data
-        
+
         db.session.add(pm)
         db.session.commit()
         flash('Payment method added successfully!', 'success')
         return redirect(url_for('admin.payment_methods'))
-    
-    methods = PaymentMethod.query.all()
+
+    methods = PaymentMethod.query.order_by(PaymentMethod.created_at.desc()).all()
     return render_template('admin/payment_methods.html', form=form, methods=methods)
+
 
 @bp.route('/payment-method/<int:id>/toggle', methods=['POST'])
 @login_required
@@ -220,6 +269,7 @@ def toggle_payment_method(id):
     flash('Payment method status updated', 'success')
     return redirect(url_for('admin.payment_methods'))
 
+
 @bp.route('/payment-method/<int:id>/delete', methods=['POST'])
 @login_required
 @admin_required
@@ -230,24 +280,24 @@ def delete_payment_method(id):
     flash('Payment method deleted', 'success')
     return redirect(url_for('admin.payment_methods'))
 
+
+# ------------------------------------------
+# LOCATIONS MANAGEMENT
+# ------------------------------------------
 @bp.route('/locations', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def locations():
     form = LocationForm()
-    
     if form.validate_on_submit():
-        location = Location(
-            name=form.name.data,
-            country=form.country.data
-        )
+        location = Location(name=form.name.data, country=form.country.data)
         db.session.add(location)
         db.session.commit()
-        flash('Location added', 'success')
+        flash('Location added successfully', 'success')
         return redirect(url_for('admin.locations'))
-    
     all_locations = Location.query.all()
     return render_template('admin/locations.html', form=form, locations=all_locations)
+
 
 @bp.route('/location/<int:id>/delete', methods=['POST'])
 @login_required
@@ -259,60 +309,417 @@ def delete_location(id):
     flash('Location deleted', 'success')
     return redirect(url_for('admin.locations'))
 
+
+# ------------------------------------------
+# APPRECIATION EMAIL
+# ------------------------------------------
 @bp.route('/appreciate/<int:user_id>', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def appreciate_user(user_id):
     user = User.query.get_or_404(user_id)
     form = AppreciationForm()
-    
     if form.validate_on_submit():
-        from flask_mail import Mail
-        mail = Mail(current_app)
-        
-        msg = Message(
-            subject='Appreciation from Helping Hand Together',
-            recipients=[user.email],
-            body=form.message.data
-        )
-        
+        mail = current_app.extensions['mail']
+        default_sender = current_app.config.get('MAIL_DEFAULT_SENDER')
+        subject_prefix = current_app.config.get('PLATFORM_NAME', 'Helping Hand Together')
+        msg = Message(subject=f'Appreciation from {subject_prefix}',
+                      recipients=[user.email],
+                      body=form.message.data,
+                      sender=default_sender)
         try:
             mail.send(msg)
             flash(f'Appreciation email sent to {user.name}', 'success')
         except Exception as e:
             flash(f'Failed to send email: {str(e)}', 'danger')
-        
         return redirect(url_for('admin.users'))
-    
     return render_template('admin/appreciate.html', user=user, form=form)
 
+
+# ------------------------------------------
+# DONATIONS MANAGEMENT
+# ------------------------------------------
 @bp.route('/donations')
 @login_required
 @admin_required
 def donations():
     page = request.args.get('page', 1, type=int)
     status = request.args.get('status', 'all')
-    
+
     query = Donation.query
     if status != 'all':
         query = query.filter_by(status=status)
-    
+
     donations = query.order_by(Donation.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
     return render_template('admin/donations.html', donations=donations, status=status)
+
 
 @bp.route('/donation/<int:id>/confirm', methods=['POST'])
 @login_required
 @admin_required
 def confirm_donation(id):
     donation = Donation.query.get_or_404(id)
-    
-    if donation.status == 'pending' and donation.payment_method == 'bank':
+    if donation.status in ['pending','awaiting_verification']:
         donation.status = 'completed'
-        campaign = donation.campaign
-        campaign.raised_amount += donation.amount
+        donation.campaign.raised_amount += donation.amount
         db.session.commit()
-        flash('Donation confirmed', 'success')
+        flash('Donation confirmed and campaign total updated', 'success')
     else:
-        flash('Cannot confirm this donation', 'warning')
-    
+        flash('Donation already confirmed', 'warning')
     return redirect(url_for('admin.donations'))
+
+@bp.route('/donation/<int:id>/reject', methods=['POST'])
+@login_required
+@admin_required
+def reject_donation(id):
+    donation = Donation.query.get_or_404(id)
+    if donation.status != 'completed':
+        donation.status = 'rejected'
+        db.session.commit()
+        flash('Donation rejected', 'info')
+    else:
+        flash('Cannot reject a completed donation', 'warning')
+    return redirect(url_for('admin.donations'))
+
+
+# ------------------------------------------
+# ENHANCED KYC MANAGEMENT
+# ------------------------------------------
+@bp.route('/kyc-management')
+@login_required
+@admin_required
+def kyc_management():
+    """Enhanced KYC management with image viewing"""
+    kyc_documents = KYC.query.order_by(KYC.submitted_at.desc()).all()
+    return render_template('admin/kyc_management.html', kyc_documents=kyc_documents)
+
+
+@bp.route('/kyc/<int:kyc_id>/update-status', methods=['POST'])
+@login_required
+@admin_required
+def update_kyc_status(kyc_id):
+    """Update KYC document status"""
+    kyc = KYC.query.get_or_404(kyc_id)
+    new_status = request.form.get('status')
+    
+    old_status = kyc.status
+    kyc.status = new_status
+    
+    if new_status == 'verified':
+        kyc.verified_at = datetime.utcnow()
+    
+    db.session.commit()
+    
+    # Log the action
+    ActivityLogger.log_audit_action(
+        current_user.id,
+        f'kyc_status_updated',
+        'kyc',
+        kyc.id,
+        {'status': old_status},
+        {'status': new_status}
+    )
+    
+    # Notify user
+    if new_status == 'verified':
+        NotificationManager.create_notification(
+            kyc.user.id,
+            'KYC Verified',
+            'Your identity verification has been approved!',
+            'success'
+        )
+    elif new_status == 'rejected':
+        NotificationManager.create_notification(
+            kyc.user.id,
+            'KYC Rejected',
+            'Your identity verification was rejected. Please resubmit with valid documents.',
+            'warning'
+        )
+    
+    flash(f'KYC status updated to {new_status}', 'success')
+    return redirect(url_for('admin.kyc_management'))
+
+
+# ------------------------------------------
+# USER DETAILS API
+# ------------------------------------------
+@bp.route('/api/user-details/<int:user_id>')
+@login_required
+@admin_required
+def get_user_details(user_id):
+    """Get detailed user information for admin"""
+    user = User.query.get_or_404(user_id)
+    
+    # Get user statistics
+    campaigns_count = Campaign.query.filter_by(owner_id=user.id).count()
+    donations_made = Donation.query.filter_by(donor_email=user.email).all()
+    donations_count = len(donations_made)
+    total_donated = sum(d.amount for d in donations_made if d.status == 'completed')
+    
+    # Get recent activities
+    activities = UserActivity.query.filter_by(user_id=user.id)\
+                                  .order_by(UserActivity.created_at.desc())\
+                                  .limit(10).all()
+    
+    return jsonify({
+        'id': user.id,
+        'name': user.name,
+        'email': user.email,
+        'phone_number': user.phone_number,
+        'location': user.location,
+        'latitude': user.latitude,
+        'longitude': user.longitude,
+        'created_at': user.created_at.isoformat(),
+        'last_seen': user.last_seen.isoformat(),
+        'is_active': user.is_active,
+        'login_count': user.login_count,
+        'campaigns_count': campaigns_count,
+        'donations_count': donations_count,
+        'total_donated': total_donated,
+        'activities': [{
+            'activity_type': a.activity_type,
+            'description': a.description,
+            'ip_address': a.ip_address,
+            'created_at': a.created_at.isoformat()
+        } for a in activities]
+    })
+
+
+# ------------------------------------------
+# ENHANCED USER MANAGEMENT
+# ------------------------------------------
+@bp.route('/users-advanced')
+@login_required
+@admin_required
+def users_advanced():
+    """Advanced user management with location and activity data"""
+    page = request.args.get('page', 1, type=int)
+    search = request.args.get('search', '')
+    location_filter = request.args.get('location', '')
+    
+    query = User.query
+    
+    if search:
+        query = query.filter(
+            User.name.contains(search) |
+            User.email.contains(search)
+        )
+    
+    if location_filter:
+        query = query.filter(User.location.contains(location_filter))
+    
+    users = query.order_by(User.last_seen.desc()).paginate(
+        page=page, per_page=20, error_out=False
+    )
+    
+    # Get location statistics
+    location_stats = db.session.query(
+        User.location, func.count(User.id)
+    ).group_by(User.location).filter(User.location.isnot(None)).all()
+    
+    return render_template('admin/users_advanced.html', 
+                         users=users, 
+                         location_stats=location_stats,
+                         search=search,
+                         location_filter=location_filter)
+
+
+# ------------------------------------------
+# ANALYTICS DASHBOARD
+# ------------------------------------------
+@bp.route('/analytics')
+@login_required
+@admin_required
+def analytics():
+    """Advanced analytics dashboard"""
+    # Time-based statistics
+    from datetime import timedelta
+    
+    now = datetime.utcnow()
+    last_30_days = now - timedelta(days=30)
+    last_7_days = now - timedelta(days=7)
+    
+    # User growth
+    new_users_30d = User.query.filter(User.created_at >= last_30_days).count()
+    new_users_7d = User.query.filter(User.created_at >= last_7_days).count()
+    
+    # Campaign stats
+    campaigns_30d = Campaign.query.filter(Campaign.created_at >= last_30_days).count()
+    published_campaigns = Campaign.query.filter_by(published=True).count()
+    
+    # Donation stats
+    donations_30d = Donation.query.filter(
+        Donation.created_at >= last_30_days,
+        Donation.status == 'completed'
+    ).count()
+    
+    amount_30d = db.session.query(func.sum(Donation.amount)).filter(
+        Donation.created_at >= last_30_days,
+        Donation.status == 'completed'
+    ).scalar() or 0
+    
+    # Top campaigns by donations
+    top_campaigns = db.session.query(
+        Campaign.title,
+        func.count(Donation.id).label('donation_count'),
+        func.sum(Donation.amount).label('total_amount')
+    ).join(Donation).filter(Donation.status == 'completed')\
+     .group_by(Campaign.id).order_by(func.sum(Donation.amount).desc()).limit(10).all()
+    
+    # Payment method usage
+    payment_stats = db.session.query(
+        Donation.payment_method,
+        func.count(Donation.id).label('count')
+    ).filter(Donation.status == 'completed')\
+     .group_by(Donation.payment_method).all()
+    
+    return render_template('admin/analytics.html',
+                         new_users_30d=new_users_30d,
+                         new_users_7d=new_users_7d,
+                         campaigns_30d=campaigns_30d,
+                         published_campaigns=published_campaigns,
+                         donations_30d=donations_30d,
+                         amount_30d=amount_30d,
+                         top_campaigns=top_campaigns,
+                         payment_stats=payment_stats)
+
+
+# ------------------------------------------
+# SYSTEM SETTINGS
+# ------------------------------------------
+@bp.route('/settings', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def system_settings():
+    """System configuration and settings"""
+    from models import SystemSettings
+
+    if request.method == 'POST':
+        settings_data = request.form.to_dict()
+
+        # Normalize checkboxes (set to false if missing)
+        if 'setting_smtp_use_tls' not in settings_data:
+            settings_data['setting_smtp_use_tls'] = 'false'
+
+        # Stash platform name for email subject prefix
+        platform_name = settings_data.get('setting_platform_name', 'Helping Hand Together')
+
+        for key, value in settings_data.items():
+            if not key.startswith('setting_'):
+                continue
+            setting_key = key.replace('setting_', '')
+            setting = SystemSettings.query.filter_by(key=setting_key).first()
+
+            # Preserve existing SMTP password if left blank
+            if setting_key == 'smtp_password' and (value is None or value.strip() == ''):
+                continue
+
+            if setting:
+                # Encrypt sensitive settings
+                if setting.is_encrypted:
+                    setting.value = security_manager.encrypt_data(value)
+                else:
+                    setting.value = value
+                setting.updated_at = datetime.utcnow()
+            else:
+                # Create new setting
+                is_encrypted = setting_key in ['smtp_password', 'api_keys', 'secrets']
+                setting_value = security_manager.encrypt_data(value) if is_encrypted else value
+                new_setting = SystemSettings(
+                    key=setting_key,
+                    value=setting_value,
+                    is_encrypted=is_encrypted
+                )
+                db.session.add(new_setting)
+
+        db.session.commit()
+
+        # Apply runtime config for email immediately
+        try:
+            smtp_server = SystemSettings.query.filter_by(key='smtp_server').first()
+            smtp_port = SystemSettings.query.filter_by(key='smtp_port').first()
+            smtp_username = SystemSettings.query.filter_by(key='smtp_username').first()
+            smtp_password = SystemSettings.query.filter_by(key='smtp_password').first()
+            smtp_use_tls = SystemSettings.query.filter_by(key='smtp_use_tls').first()
+            sender_name = SystemSettings.query.filter_by(key='mail_default_sender_name').first()
+            sender_email = SystemSettings.query.filter_by(key='mail_default_sender_email').first()
+
+            current_app.config['MAIL_SERVER'] = smtp_server.value if smtp_server else current_app.config.get('MAIL_SERVER')
+            current_app.config['MAIL_PORT'] = int(smtp_port.value) if smtp_port and smtp_port.value else current_app.config.get('MAIL_PORT', 587)
+            current_app.config['MAIL_USERNAME'] = smtp_username.value if smtp_username else current_app.config.get('MAIL_USERNAME')
+            current_app.config['MAIL_PASSWORD'] = (
+                security_manager.decrypt_data(smtp_password.value)
+                if (smtp_password and smtp_password.value and smtp_password.is_encrypted)
+                else (smtp_password.value if smtp_password else current_app.config.get('MAIL_PASSWORD'))
+            )
+            current_app.config['MAIL_USE_TLS'] = (str(smtp_use_tls.value).lower() in ['1','true','on','yes']) if smtp_use_tls else current_app.config.get('MAIL_USE_TLS', True)
+            # Default sender and platform name
+            if sender_email and sender_email.value:
+                default_name = sender_name.value if sender_name and sender_name.value else platform_name
+                current_app.config['MAIL_DEFAULT_SENDER'] = (default_name, sender_email.value)
+            current_app.config['PLATFORM_NAME'] = platform_name
+        except Exception as e:
+            current_app.logger.warning(f"Failed to apply email settings: {e}")
+
+        flash('Settings updated successfully', 'success')
+        return redirect(url_for('admin.system_settings'))
+
+    settings = SystemSettings.query.order_by(SystemSettings.category, SystemSettings.key).all()
+    settings_map = {s.key: s.value for s in settings}
+
+    return render_template('admin/system_settings.html', settings=settings, settings_map=settings_map)
+
+
+# ------------------------------------------
+# NOTIFICATION MANAGEMENT
+# ------------------------------------------
+@bp.route('/notifications')
+@login_required
+@admin_required
+def manage_notifications():
+    """Manage system notifications"""
+    page = request.args.get('page', 1, type=int)
+    notifications = Notification.query.order_by(Notification.created_at.desc())\
+                                    .paginate(page=page, per_page=50, error_out=False)
+    
+    return render_template('admin/notifications.html', notifications=notifications)
+
+
+@bp.route('/send-notification', methods=['POST'])
+@login_required
+@admin_required
+def send_notification():
+    """Send notification to users"""
+    user_ids = request.form.getlist('user_ids')
+    title = request.form.get('title')
+    message = request.form.get('message')
+    notification_type = request.form.get('type', 'info')
+    send_email = request.form.get('send_email') == 'on'
+    
+    if 'all_users' in user_ids:
+        users = User.query.all()
+    else:
+        ids = [int(uid) for uid in user_ids if uid.isdigit()]
+        users = User.query.filter(User.id.in_(ids)).all() if ids else []
+    
+    for user in users:
+        NotificationManager.create_notification(
+            user.id, title, message, notification_type
+        )
+    
+    if send_email and users:
+        mail = current_app.extensions['mail']
+        default_sender = current_app.config.get('MAIL_DEFAULT_SENDER')
+        subject_prefix = current_app.config.get('PLATFORM_NAME', 'Helping Hand Together')
+        for user in users:
+            try:
+                msg = Message(subject=f"[{subject_prefix}] {title}",
+                              recipients=[user.email],
+                              body=message,
+                              sender=default_sender)
+                mail.send(msg)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to send email to {user.email}: {e}")
+    
+    flash(f'Notification sent to {len(users)} users{" and emailed" if send_email else ""}', 'success')
+    return redirect(url_for('admin.manage_notifications'))

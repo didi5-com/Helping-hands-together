@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}KYC Management - Admin{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-file-earmark-person"></i> KYC Document Management</h2>
+        <div>
+            <button class="btn btn-outline-primary" onclick="filterByStatus('all')">All</button>
+            <button class="btn btn-outline-warning" onclick="filterByStatus('pending')">Pending</button>
+            <button class="btn btn-outline-success" onclick="filterByStatus('verified')">Verified</button>
+            <button class="btn btn-outline-danger" onclick="filterByStatus('rejected')">Rejected</button>
+        </div>
+    </div>
+
+    <div class="row">
+        {% for kyc in kyc_documents %}
+        <div class="col-md-6 col-lg-4 mb-4 kyc-card" data-status="{{ kyc.status }}">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">{{ kyc.user.name }}</h6>
+                    <span class="badge 
+                        {% if kyc.status == 'pending' %}bg-warning{% endif %}
+                        {% if kyc.status == 'verified' %}bg-success{% endif %}
+                        {% if kyc.status == 'rejected' %}bg-danger{% endif %}">
+                        {{ kyc.status.title() }}
+                    </span>
+                </div>
+                
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            <strong>User Email:</strong> {{ kyc.user.email }}<br>
+                            <strong>ID Type:</strong> {{ kyc.id_type.replace('_', ' ').title() }}<br>
+                            <strong>Submitted:</strong> {{ kyc.submitted_at.strftime('%Y-%m-%d %H:%M') }}
+                        </small>
+                    </div>
+                    
+                    {% if kyc.document_path %}
+                    {% set display_path = kyc.document_path if kyc.document_path.startswith('/static') else kyc.document_path.replace(config['UPLOAD_FOLDER'], '/static/uploads') %}
+                    <div class="mb-3">
+                        <img src="{{ display_path }}" 
+                             class="img-fluid rounded cursor-pointer kyc-document" 
+                             style="max-height: 200px; width: 100%; object-fit: cover;"
+                             onclick="showImageModal('{{ display_path }}', '{{ kyc.user.name }}', '{{ kyc.id_type }}')"
+                             alt="KYC Document">
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-grid gap-2">
+                        {% if kyc.status == 'pending' %}
+                        <div class="btn-group" role="group">
+                            <form method="POST" action="{{ url_for('admin.update_kyc_status', kyc_id=kyc.id) }}" class="d-inline">
+                                <input type="hidden" name="status" value="verified">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-success btn-sm">
+                                    <i class="bi bi-check-circle"></i> Verify
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('admin.update_kyc_status', kyc_id=kyc.id) }}" class="d-inline">
+                                <input type="hidden" name="status" value="rejected">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-danger btn-sm">
+                                    <i class="bi bi-x-circle"></i> Reject
+                                </button>
+                            </form>
+                        </div>
+                        {% endif %}
+                        
+                        <button class="btn btn-outline-info btn-sm" onclick="showUserDetails({{ kyc.user.id }})">
+                            <i class="bi bi-person-lines-fill"></i> User Details
+                        </button>
+                    </div>
+                </div>
+                
+                {% if kyc.verified_at %}
+                <div class="card-footer text-muted">
+                    <small>Verified on {{ kyc.verified_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Image Modal -->
+<div class="modal fade" id="imageModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalTitle">KYC Document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalImage" src="" class="img-fluid" alt="KYC Document">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="downloadBtn">
+                    <i class="bi bi-download"></i> Download
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- User Details Modal -->
+<div class="modal fade" id="userDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">User Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="userDetailsContent">
+                <!-- User details will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterByStatus(status) {
+    const cards = document.querySelectorAll('.kyc-card');
+    cards.forEach(card => {
+        if (status === 'all' || card.dataset.status === status) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function showImageModal(imageSrc, userName, idType) {
+    document.getElementById('modalImage').src = imageSrc;
+    document.getElementById('imageModalTitle').textContent = `${userName} - ${idType.replace('_', ' ').toUpperCase()}`;
+    document.getElementById('downloadBtn').onclick = () => downloadImage(imageSrc, `${userName}_${idType}`);
+    new bootstrap.Modal(document.getElementById('imageModal')).show();
+}
+
+function downloadImage(src, filename) {
+    const link = document.createElement('a');
+    link.href = src;
+    link.download = `${filename}.jpg`;
+    link.click();
+}
+
+async function showUserDetails(userId) {
+    try {
+        const response = await fetch(`{{ url_for('admin.get_user_details', user_id=0) }}`.replace('0', userId));
+        const data = await response.json();
+        
+        const content = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Basic Information</h6>
+                    <table class="table table-sm">
+                        <tr><th>Name:</th><td>${data.name}</td></tr>
+                        <tr><th>Email:</th><td>${data.email}</td></tr>
+                        <tr><th>Phone:</th><td>${data.phone_number || 'Not provided'}</td></tr>
+                        <tr><th>Location:</th><td>${data.location || 'Not provided'}</td></tr>
+                        <tr><th>Joined:</th><td>${new Date(data.created_at).toLocaleDateString()}</td></tr>
+                        <tr><th>Last Seen:</th><td>${new Date(data.last_seen).toLocaleDateString()}</td></tr>
+                        <tr><th>Status:</th><td>
+                            <span class="badge ${data.is_active ? 'bg-success' : 'bg-danger'}">
+                                ${data.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                        </td></tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Statistics</h6>
+                    <table class="table table-sm">
+                        <tr><th>Login Count:</th><td>${data.login_count}</td></tr>
+                        <tr><th>Campaigns:</th><td>${data.campaigns_count}</td></tr>
+                        <tr><th>Donations:</th><td>${data.donations_count}</td></tr>
+                        <tr><th>Total Donated:</th><td>$${data.total_donated}</td></tr>
+                    </table>
+                    
+                    ${data.latitude && data.longitude ? `
+                    <h6>Location</h6>
+                    <div id="userMap" style="height: 200px; background: #f0f0f0; border-radius: 5px; display: flex; align-items: center; justify-content: center;">
+                        <small class="text-muted">
+                            <i class="bi bi-geo-alt"></i> ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}
+                        </small>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+            
+            <div class="mt-3">
+                <h6>Recent Activities</h6>
+                <div class="list-group">
+                    ${data.activities.map(activity => `
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${activity.activity_type.replace('_', ' ').toUpperCase()}</h6>
+                                <small>${new Date(activity.created_at).toLocaleDateString()}</small>
+                            </div>
+                            <p class="mb-1">${activity.description || 'No description'}</p>
+                            <small>IP: ${activity.ip_address || 'Unknown'}</small>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('userDetailsContent').innerHTML = content;
+        new bootstrap.Modal(document.getElementById('userDetailsModal')).show();
+    } catch (error) {
+        alert('Failed to load user details');
+        console.error(error);
+    }
+}
+
+// Auto-refresh every 30 seconds
+setInterval(() => {
+    location.reload();
+}, 30000);
+</script>
+{% endblock %}

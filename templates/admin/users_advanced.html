@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+
+{% block title %}Advanced User Management - Admin{% endblock %}
+
+{% block head %}
+<style>
+.user-card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+.user-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+}
+.user-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.status-online {
+    border: 3px solid #28a745;
+}
+.status-offline {
+    border: 3px solid #6c757d;
+}
+.location-map {
+    height: 300px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="display-5 fw-bold text-primary">Advanced User Management</h1>
+                    <p class="lead text-muted">Comprehensive user insights, location data, and activity monitoring</p>
+                </div>
+                <div>
+                    <button class="btn btn-outline-primary me-2" onclick="exportUsers()">
+                        <i class="bi bi-download"></i> Export Users
+                    </button>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sendNotificationModal">
+                        <i class="bi bi-bell"></i> Send Notification
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filter Row -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Search Users</label>
+                            <input type="text" class="form-control" name="search" value="{{ search }}" 
+                                   placeholder="Name or email...">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Filter by Location</label>
+                            <select class="form-select" name="location">
+                                <option value="">All Locations</option>
+                                {% for location, count in location_stats %}
+                                <option value="{{ location }}" {{ 'selected' if location == location_filter }}>
+                                    {{ location }} ({{ count }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Status</label>
+                            <select class="form-select" name="status">
+                                <option value="">All Users</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="admin">Administrators</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-search"></i> Filter
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Row -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center bg-primary text-white">
+                <div class="card-body">
+                    <i class="bi bi-people-fill" style="font-size: 2rem;"></i>
+                    <h3 class="mt-2">{{ users.total }}</h3>
+                    <p class="mb-0">Total Users</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-success text-white">
+                <div class="card-body">
+                    <i class="bi bi-person-check-fill" style="font-size: 2rem;"></i>
+                    <h3 class="mt-2">{{ location_stats|length }}</h3>
+                    <p class="mb-0">Locations</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-info text-white">
+                <div class="card-body">
+                    <i class="bi bi-geo-alt-fill" style="font-size: 2rem;"></i>
+                    <h3 class="mt-2">{{ users.items|selectattr('location_consent')|list|length }}</h3>
+                    <p class="mb-0">Location Enabled</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-warning text-white">
+                <div class="card-body">
+                    <i class="bi bi-clock-fill" style="font-size: 2rem;"></i>
+                    <h3 class="mt-2">{{ users.items|selectattr('is_active')|list|length }}</h3>
+                    <p class="mb-0">Active Users</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Users Grid -->
+    <div class="row">
+        {% for user in users.items %}
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="card user-card h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <img src="{{ user.profile_image or '/static/images/default-avatar.png' }}" 
+                             class="user-avatar {{ 'status-online' if user.is_active else 'status-offline' }}" 
+                             alt="Profile">
+                        <div class="ms-3 flex-grow-1">
+                            <h6 class="mb-1 fw-bold">{{ user.name }}</h6>
+                            <p class="mb-0 text-muted small">{{ user.email }}</p>
+                            {% if user.is_admin %}
+                            <span class="badge bg-danger">Admin</span>
+                            {% endif %}
+                            {% if user.location_consent %}
+                            <span class="badge bg-success">Location On</span>
+                            {% endif %}
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                    data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="viewUserDetails({{ user.id }})">
+                                    <i class="bi bi-eye"></i> View Details
+                                </a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('admin.appreciate_user', user_id=user.id) }}">
+                                    <i class="bi bi-heart"></i> Send Appreciation
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" onclick="toggleUserStatus({{ user.id }})">
+                                    <i class="bi bi-power"></i> {{ 'Deactivate' if user.is_active else 'Activate' }}
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="row text-center mb-3">
+                        <div class="col-4">
+                            <div class="border-end">
+                                <h6 class="mb-0 text-primary">{{ user.login_count or 0 }}</h6>
+                                <small class="text-muted">Logins</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border-end">
+                                <h6 class="mb-0 text-success">{{ user.campaigns|list|length }}</h6>
+                                <small class="text-muted">Campaigns</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <h6 class="mb-0 text-info">{{ user.activities|list|length }}</h6>
+                            <small class="text-muted">Activities</small>
+                        </div>
+                    </div>
+
+                    {% if user.location %}
+                    <div class="mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-geo-alt text-danger me-2"></i>
+                            <span class="small text-muted">{{ user.location }}</span>
+                        </div>
+                        {% if user.latitude and user.longitude %}
+                        <div class="small text-muted">
+                            <i class="bi bi-crosshair me-1"></i>
+                            {{ "%.4f"|format(user.latitude) }}, {{ "%.4f"|format(user.longitude) }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <small class="text-muted">
+                                <i class="bi bi-calendar me-1"></i>
+                                Joined {{ user.created_at.strftime('%b %Y') }}
+                            </small>
+                        </div>
+                        <div>
+                            <small class="text-muted">
+                                <i class="bi bi-clock me-1"></i>
+                                {{ user.last_seen.strftime('%m/%d %H:%M') if user.last_seen else 'Never' }}
+                            </small>
+                        </div>
+                    </div>
+
+                    {% if user.bio %}
+                    <div class="mt-2">
+                        <small class="text-muted">{{ user.bio[:60] }}{% if user.bio|length > 60 %}...{% endif %}</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if users.pages > 1 %}
+    <div class="row">
+        <div class="col-12">
+            <nav>
+                <ul class="pagination justify-content-center">
+                    {% if users.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('admin.users_advanced', page=users.prev_num, search=search, location=location_filter) }}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for page in users.iter_pages() %}
+                        {% if page %}
+                            {% if page != users.page %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('admin.users_advanced', page=page, search=search, location=location_filter) }}">{{ page }}</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page }}</span>
+                            </li>
+                            {% endif %}
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if users.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('admin.users_advanced', page=users.next_num, search=search, location=location_filter) }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- User Details Modal -->
+<div class="modal fade" id="userDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">User Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="userDetailsContent">
+                <!-- Content loaded via JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Send Notification Modal -->
+<div class="modal fade" id="sendNotificationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Send Notification</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+                    <form method="POST" action="{{ url_for('admin.send_notification') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Recipients</label>
+                        <select class="form-select" name="user_ids" multiple>
+                            <option value="all_users">All Users</option>
+                            {% for user in users.items %}
+                            <option value="{{ user.id }}">{{ user.name }} ({{ user.email }})</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Hold Ctrl to select multiple users</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        <input type="text" class="form-control" name="title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Message</label>
+                        <textarea class="form-control" name="message" rows="3" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" name="type">
+                            <option value="info">Info</option>
+                            <option value="success">Success</option>
+                            <option value="warning">Warning</option>
+                            <option value="error">Error</option>
+                        </select>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="send_email" id="sendEmail">
+                        <label class="form-check-label" for="sendEmail">Also email selected users</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Send Notification</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+async function viewUserDetails(userId) {
+    try {
+        const response = await fetch(`{{ url_for('admin.get_user_details', user_id=0) }}`.replace('0', userId));
+        const data = await response.json();
+        
+        const content = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Basic Information</h6>
+                    <table class="table table-sm">
+                        <tr><th>Name:</th><td>${data.name}</td></tr>
+                        <tr><th>Email:</th><td>${data.email}</td></tr>
+                        <tr><th>Phone:</th><td>${data.phone_number || 'Not provided'}</td></tr>
+                        <tr><th>Location:</th><td>${data.location || 'Not provided'}</td></tr>
+                        <tr><th>Joined:</th><td>${new Date(data.created_at).toLocaleDateString()}</td></tr>
+                        <tr><th>Last Seen:</th><td>${new Date(data.last_seen).toLocaleDateString()}</td></tr>
+                        <tr><th>Status:</th><td>
+                            <span class="badge ${data.is_active ? 'bg-success' : 'bg-danger'}">
+                                ${data.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                        </td></tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Statistics</h6>
+                    <table class="table table-sm">
+                        <tr><th>Login Count:</th><td>${data.login_count}</td></tr>
+                        <tr><th>Campaigns:</th><td>${data.campaigns_count}</td></tr>
+                        <tr><th>Donations:</th><td>${data.donations_count}</td></tr>
+                        <tr><th>Total Donated:</th><td>$${data.total_donated}</td></tr>
+                    </table>
+                    
+                    ${data.latitude && data.longitude ? `
+                    <h6>Location</h6>
+                    <div class="location-map">
+                        <div class="text-center">
+                            <i class="bi bi-geo-alt" style="font-size: 3rem;"></i>
+                            <p class="mb-0">${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}</p>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+            
+            <div class="mt-3">
+                <h6>Recent Activities</h6>
+                <div class="list-group" style="max-height: 300px; overflow-y: auto;">
+                    ${data.activities.map(activity => `
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${activity.activity_type.replace('_', ' ').toUpperCase()}</h6>
+                                <small>${new Date(activity.created_at).toLocaleDateString()}</small>
+                            </div>
+                            <p class="mb-1">${activity.description || 'No description'}</p>
+                            <small>IP: ${activity.ip_address || 'Unknown'}</small>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('userDetailsContent').innerHTML = content;
+        new bootstrap.Modal(document.getElementById('userDetailsModal')).show();
+    } catch (error) {
+        alert('Failed to load user details');
+        console.error(error);
+    }
+}
+
+function toggleUserStatus(userId) {
+    if (confirm('Are you sure you want to change this user\'s status?')) {
+        // Implementation for toggling user status
+        alert('User status toggle functionality would be implemented here');
+    }
+}
+
+function exportUsers() {
+    alert('Export functionality would generate CSV/Excel file with user data');
+}
+</script>
+{% endblock %}

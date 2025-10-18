@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}{{ method|capitalize }} Payment Instructions - Helping Hand Together{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-lg">
+                <div class="card-header {% if method == 'paypal' %}bg-info{% elif method == 'paystack' %}bg-success{% else %}bg-dark{% endif %} text-white">
+                    <h3 class="mb-0">
+                        {% if method == "paypal" %}
+                            <i class="bi bi-paypal"></i> PayPal Payment Instructions
+                        {% elif method == "paystack" %}
+                            <i class="bi bi-credit-card"></i> Paystack Payment Instructions
+                        {% elif method == "crypto" %}
+                            <i class="bi bi-currency-bitcoin"></i> Crypto Payment Instructions
+                        {% elif method == "bank" %}
+                            <i class="bi bi-bank"></i> Bank Transfer Instructions
+                        {% endif %}
+                    </h3>
+                </div>
+
+                <div class="card-body p-4">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        <strong>Donation Reference:</strong> DON-{{ donation.id }}
+                    </div>
+
+                    <h5 class="mb-3">Donation Details</h5>
+                    <table class="table table-bordered">
+                        <tr>
+                            <th width="30%">Campaign:</th>
+                            <td>{{ donation.campaign.title }}</td>
+                        </tr>
+                        <tr>
+                            <th>Amount:</th>
+                            <td class="fs-4 fw-bold text-success">${{ "%.2f"|format(donation.amount) }}</td>
+                        </tr>
+                        <tr>
+                            <th>Donor Name:</th>
+                            <td>{{ donation.donor_name }}</td>
+                        </tr>
+                        <tr>
+                            <th>Email:</th>
+                            <td>{{ donation.donor_email }}</td>
+                        </tr>
+                    </table>
+
+                    {% if method == "paypal" %}
+                    <!-- PayPal Section -->
+                    <div class="mt-4">
+                        <h5 class="mb-3"><i class="bi bi-envelope-at"></i> PayPal Payment Details</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <p class="mb-2">Please send your donation to the PayPal address below:</p>
+                                <div class="alert alert-primary text-center fs-5">
+                                    <strong>{{ paypal_email }}</strong>
+                                </div>
+                                <p>After sending payment, click the button below to confirm.</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% elif method == "crypto" %}
+                    <!-- Crypto Section -->
+                    <div class="mt-4">
+                        <h5 class="mb-3"><i class="bi bi-wallet2"></i> Cryptocurrency Wallets</h5>
+                        {% if crypto_methods %}
+                            {% for crypto in crypto_methods %}
+                            <div class="card bg-light mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="bi bi-currency-bitcoin"></i> {{ crypto.crypto_currency }} - {{ crypto.name }}
+                                    </h6>
+                                    <div class="mb-3">
+                                        <strong>Wallet Address:</strong><br>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" value="{{ crypto.crypto_wallet_address }}" id="wallet-{{ loop.index }}" readonly>
+                                            <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard('wallet-{{ loop.index }}')">
+                                                <i class="bi bi-clipboard"></i> Copy
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {% if crypto.details %}
+                                    <div class="alert alert-info">
+                                        <strong>Instructions:</strong><br>
+                                        {{ crypto.details }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                No cryptocurrency wallets have been configured by the administrator.
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% elif method == "bank" %}
+                    <!-- Bank Transfer Section -->
+                    <div class="mt-4">
+                        <h5 class="mb-3"><i class="bi bi-bank"></i> Bank Transfer Details</h5>
+                        {% if bank_method %}
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <table class="table table-borderless mb-0">
+                                    <tr>
+                                        <th width="30%">Bank Name:</th>
+                                        <td><strong>{{ bank_method.bank_name }}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Account Name:</th>
+                                        <td><strong>{{ bank_method.account_name }}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Account Number:</th>
+                                        <td><strong class="text-primary fs-5">{{ bank_method.account_number }}</strong></td>
+                                    </tr>
+                                    {% if bank_method.routing_number %}
+                                    <tr>
+                                        <th>Routing Number:</th>
+                                        <td><strong>{{ bank_method.routing_number }}</strong></td>
+                                    </tr>
+                                    {% endif %}
+                                    {% if bank_method.bank_address %}
+                                    <tr>
+                                        <th>Bank Address:</th>
+                                        <td>{{ bank_method.bank_address }}</td>
+                                    </tr>
+                                    {% endif %}
+                                </table>
+                                {% if bank_method.details %}
+                                <div class="alert alert-warning mt-3">
+                                    <strong>Additional Instructions:</strong><br>
+                                    {{ bank_method.details }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            No bank account information has been configured by the administrator.
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% elif method == "paystack" %}
+                    <!-- Paystack Fallback Section -->
+                    <div class="mt-4">
+                        <h5 class="mb-3"><i class="bi bi-credit-card text-success"></i> Paystack Payment</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                {% set rate = usd_ngn_rate or 1500 %}
+                                {% set amount_ngn = (donation.amount * rate) %}
+                                <p class="mb-2">Payments via Paystack are processed in Nigerian Naira (NGN). Your USD donation will be converted automatically.</p>
+                                <div class="alert alert-warning">
+                                    <strong>Reference:</strong> DON-{{ donation.id }}<br>
+                                    <strong>USD Amount:</strong> ${{ "%.2f"|format(donation.amount) }}<br>
+                                    <strong>Estimated NGN Charge:</strong> ₦{{ "{:,.0f}".format(amount_ngn) }} at rate ₦{{ rate }} / $1
+                                </div>
+                                <p class="mb-0"><small class="text-muted">If redirect doesn’t appear, try again later or choose a different method. The admin can confirm manual payments.</small></p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="mt-4 p-3 bg-warning bg-opacity-10 rounded">
+                        <h6 class="fw-bold"><i class="bi bi-exclamation-circle"></i> Important Instructions:</h6>
+                        <ol class="mb-0">
+                            <li>Always include your donation reference <strong>DON-{{ donation.id }}</strong> in the transaction note (if applicable).</li>
+                            <li>Double-check the wallet address or PayPal email before sending funds.</li>
+                            <li>Once payment is made, take a screenshot or keep the transaction ID for verification.</li>
+                            <li>Your donation will remain “Pending” until our admin verifies the payment.</li>
+                        </ol>
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <form method="POST" action="{{ url_for('main.confirm_manual_payment', donation_id=donation.id) }}" class="d-inline-block me-2">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check2-circle"></i> I Have Made Payment
+                            </button>
+                        </form>
+                        <a href="{{ url_for('main.campaign_detail', id=donation.campaign.id) }}" class="btn btn-outline-primary">
+                            <i class="bi bi-arrow-left"></i> Back to Campaign
+                        </a>
+                        <a href="{{ url_for('main.index') }}" class="btn btn-primary">
+                            <i class="bi bi-house"></i> Go to Home
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    element.select();
+    element.setSelectionRange(0, 99999); // For mobile devices
+    
+    navigator.clipboard.writeText(element.value).then(function() {
+        // Show success message
+        const button = element.nextElementSibling;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check"></i> Copied!';
+        button.classList.remove('btn-outline-secondary');
+        button.classList.add('btn-success');
+        
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-secondary');
+        }, 2000);
+    });
+}
+</script>
+{% endblock %}

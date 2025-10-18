@@ -1,205 +1,171 @@
-
 import os
+import time
 import requests
 import hmac
 import hashlib
-from flask import current_app
+from flask import jsonify, url_for, redirect, flash
+from models import db, SystemSettings
 
-class PayPalPayment:
-    def __init__(self, payment_method=None):
-        if payment_method:
-            self.client_id = payment_method.paypal_client_id
-            self.secret = payment_method.paypal_secret
-            self.mode = payment_method.paypal_mode or 'sandbox'
-        else:
-            self.client_id = os.getenv('PAYPAL_CLIENT_ID')
-            self.secret = os.getenv('PAYPAL_SECRET_KEY')
-            self.mode = os.getenv('PAYPAL_MODE', 'live')
-        self.base_url = 'https://api-m.sandbox.paypal.com' if self.mode == 'sandbox' else 'https://api-m.paypal.com'
-    
-    def get_access_token(self):
-        url = f'{self.base_url}/v1/oauth2/token'
-        headers = {'Accept': 'application/json', 'Accept-Language': 'en_US'}
-        data = {'grant_type': 'client_credentials'}
-        
-        response = requests.post(url, headers=headers, data=data, auth=(self.client_id, self.secret))
-        
-        if response.status_code == 200:
-            return response.json().get('access_token')
-        return None
-    
-    def create_order(self, amount, return_url, cancel_url):
-        access_token = self.get_access_token()
-        if not access_token:
-            return {'error': 'Failed to get access token'}
-        
-        url = f'{self.base_url}/v2/checkout/orders'
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {access_token}'
-        }
-        
-        data = {
-            'intent': 'CAPTURE',
-            'purchase_units': [{
-                'amount': {
-                    'currency_code': 'USD',
-                    'value': str(amount)
-                }
-            }],
-            'application_context': {
-                'return_url': return_url,
-                'cancel_url': cancel_url
-            }
-        }
-        
-        response = requests.post(url, json=data, headers=headers)
-        
-        if response.status_code == 201:
-            order = response.json()
-            approval_url = next((link['href'] for link in order['links'] if link['rel'] == 'approve'), None)
-            return {
-                'order_id': order['id'],
-                'approval_url': approval_url
-            }
-        
-        return {'error': 'Failed to create order'}
-    
-    def capture_order(self, order_id):
-        access_token = self.get_access_token()
-        if not access_token:
-            return {'error': 'Failed to get access token'}
-        
-        url = f'{self.base_url}/v2/checkout/orders/{order_id}/capture'
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {access_token}'
-        }
-        
-        response = requests.post(url, headers=headers)
-        
-        if response.status_code == 201:
-            return response.json()
-        
-        return {'error': 'Failed to capture order'}
-
-
+# ---- Paystack processor (uses admin-configured keys) ----
 class PaystackPayment:
     def __init__(self, payment_method=None):
-        if payment_method:
+        if payment_method and payment_method.paystack_secret_key:
             self.secret_key = payment_method.paystack_secret_key
+            self.public_key = payment_method.paystack_public_key
         else:
-            self.secret_key = os.getenv('PAYSTACK_SECRET_KEY')
-        self.base_url = 'https://api.paystack.co'
-    
-    def initialize_transaction(self, email, amount, reference, callback_url):
-        url = f'{self.base_url}/transaction/initialize'
+            # Fallback to environment variables
+            self.secret_key = os.getenv("PAYSTACK_SECRET_KEY")
+            self.public_key = os.getenv("PAYSTACK_PUBLIC_KEY")
+
+    def process_payment(self, donation):
+        # Create a reference and store it
+        reference = f"PSK_{donation.id}_{int(time.time())}"
+        donation.transaction_id = reference
+        donation.status = "pending"
+        db.session.commit()
+
+        # Determine USD->NGN conversion rate
+        rate_setting = SystemSettings.query.filter_by(key='usd_ngn_rate').first()
+        try:
+            usd_ngn_rate = float(rate_setting.value) if (rate_setting and rate_setting.value) else float(os.getenv('USD_NGN_RATE', '1500'))
+        except (TypeError, ValueError):
+            usd_ngn_rate = 1500.0
+
+        # Convert USD amount to NGN kobo for Paystack
+        amount_kobo = int(round(donation.amount * usd_ngn_rate * 100))
+
+        # Initialize Paystack transaction
+        if self.secret_key:
+            headers = {
+                'Authorization': f'Bearer {self.secret_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            callback_url = url_for('main.paystack_callback', _external=True)
+            
+            payload = {
+                'email': donation.donor_email,
+                'amount': amount_kobo,  # NGN in kobo
+                'reference': reference,
+                'currency': 'NGN',
+                'callback_url': callback_url,
+                'metadata': {
+                    'original_amount_usd': donation.amount,
+                    'applied_rate': usd_ngn_rate
+                }
+            }
+            
+            try:
+                response = requests.post(
+                    'https://api.paystack.co/transaction/initialize',
+                    headers=headers,
+                    json=payload,
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data['status']:
+                        # Return HTML redirect to Paystack checkout
+                        return redirect(data['data']['authorization_url'])
+                        
+            except requests.exceptions.RequestException as e:
+                print(f"Paystack API error: {e}")
+        
+        # Fallback to manual payment
+        flash('Paystack payment could not be initialized. Please use the instructions below or try again later.', 'warning')
+        return redirect(url_for('main.manual_payment_page', method='paystack', donation_id=donation.id))
+
+    def verify_transaction(self, reference):
+        # Verify transaction with Paystack API
+        if not self.secret_key:
+            return {"status": "failed", "message": "No secret key configured"}
+        
         headers = {
             'Authorization': f'Bearer {self.secret_key}',
             'Content-Type': 'application/json'
         }
         
-        data = {
-            'email': email,
-            'amount': int(amount * 100),  # Paystack uses kobo/cents
-            'reference': reference,
-            'callback_url': callback_url
-        }
-        
-        response = requests.post(url, json=data, headers=headers)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if result['status']:
-                return {
-                    'authorization_url': result['data']['authorization_url'],
-                    'access_code': result['data']['access_code'],
-                    'reference': result['data']['reference']
-                }
-        
-        return {'error': 'Failed to initialize transaction'}
-    
-    def verify_transaction(self, reference):
-        url = f'{self.base_url}/transaction/verify/{reference}'
-        headers = {
-            'Authorization': f'Bearer {self.secret_key}'
-        }
-        
-        response = requests.get(url, headers=headers)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if result['status'] and result['data']['status'] == 'success':
-                return {'status': 'success', 'data': result['data']}
-        
-        return {'status': 'failed'}
-    
+        try:
+            response = requests.get(
+                f'https://api.paystack.co/transaction/verify/{reference}',
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data['status'] and data['data']['status'] == 'success':
+                    return {
+                        "status": "success",
+                        "amount": data['data']['amount'] / 100,  # Convert from kobo
+                        "reference": data['data']['reference'],
+                        "customer_email": data['data']['customer']['email']
+                    }
+            
+            return {"status": "failed", "message": "Transaction verification failed"}
+            
+        except requests.exceptions.RequestException as e:
+            return {"status": "failed", "message": f"API error: {str(e)}"}
+
     def verify_webhook(self, signature, body):
-        computed_signature = hmac.new(
-            self.secret_key.encode('utf-8'),
-            body,
-            hashlib.sha512
-        ).hexdigest()
+        # If you want webhook verification using your secret, compute HMAC and compare.
+        # Paystack docs: verify using secret_key and sha512
+        if not self.secret_key or not signature:
+            return False
+        computed = hmac.new(self.secret_key.encode('utf-8'), body, hashlib.sha512).hexdigest()
+        return computed == signature
+
+# ---- PayPal processor (uses admin-configured settings) ----
+class PaypalPayment:
+    def __init__(self, payment_method=None):
+        if payment_method:
+            self.client_id = payment_method.paypal_client_id
+            self.secret = payment_method.paypal_secret  
+            self.mode = payment_method.paypal_mode or 'sandbox'
+        else:
+            # Fallback to environment variables
+            self.client_id = os.getenv("PAYPAL_CLIENT_ID")
+            self.secret = os.getenv("PAYPAL_SECRET") 
+            self.mode = os.getenv("PAYPAL_MODE", 'sandbox')
         
-        return signature == computed_signature
+        self.base_url = 'https://api-m.sandbox.paypal.com' if self.mode == 'sandbox' else 'https://api-m.paypal.com'
 
+    def process_payment(self, donation):
+        # Set donation status to pending
+        donation.status = "pending"
+        db.session.commit()
+        
+        # Redirect to manual PayPal payment page
+        return redirect(url_for('main.manual_payment_page', method='paypal', donation_id=donation.id))
 
-class CoinbaseCommercePayment:
-    def __init__(self):
-        self.api_key = os.getenv('COINBASE_API_KEY')
-        self.webhook_secret = os.getenv('COINBASE_WEBHOOK_SECRET')
-        self.base_url = 'https://api.commerce.coinbase.com'
+    # optional placeholder if you later add API flow
+    def capture_order(self, order_id):
+        # Implement real capture if using PayPal REST API
+        return {"error": "not_implemented"}
+
+# ---- Manual bank (fallback) ----
+class ManualBankPayment:
+    def __init__(self, payment_method=None):
+        self.payment_method = payment_method
     
-    def create_charge(self, name, description, amount, metadata=None):
-        url = f'{self.base_url}/charges'
-        headers = {
-            'Content-Type': 'application/json',
-            'X-CC-Api-Key': self.api_key,
-            'X-CC-Version': '2018-03-22'
-        }
-        
-        data = {
-            'name': name,
-            'description': description,
-            'pricing_type': 'fixed_price',
-            'local_price': {
-                'amount': str(amount),
-                'currency': 'USD'
-            },
-            'metadata': metadata or {}
-        }
-        
-        response = requests.post(url, json=data, headers=headers)
-        
-        if response.status_code == 201:
-            result = response.json()
-            return {
-                'charge_id': result['data']['id'],
-                'hosted_url': result['data']['hosted_url'],
-                'code': result['data']['code']
-            }
-        
-        return {'error': 'Failed to create charge'}
-    
-    def verify_webhook(self, signature, body):
-        computed_signature = hmac.new(
-            self.webhook_secret.encode('utf-8'),
-            body,
-            hashlib.sha256
-        ).hexdigest()
-        
-        return signature == computed_signature
+    def process_payment(self, donation):
+        donation.status = 'pending'
+        db.session.commit()
+        return jsonify({
+            "message": "Bank transfer initiated. Awaiting confirmation from admin.",
+            "status": "pending",
+            "donation_id": donation.id
+        })
 
-
-def get_payment_processor(payment_type):
+# ---- Helper to get processor ----
+def get_payment_processor(payment_type, payment_method=None):
     processors = {
-        'paypal': PayPalPayment,
+        'paypal': PaypalPayment,
         'paystack': PaystackPayment,
-        'crypto': CoinbaseCommercePayment
+        'bank': ManualBankPayment,
+        'manual': ManualBankPayment,
+        'crypto': ManualBankPayment  # crypto treated as manual address fallback
     }
-    
-    processor_class = processors.get(payment_type)
-    if processor_class:
-        return processor_class()
-    
-    return None
+    cls = processors.get(payment_type)
+    return cls(payment_method) if cls else None

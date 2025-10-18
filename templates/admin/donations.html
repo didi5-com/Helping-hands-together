@@ -46,9 +46,12 @@
                     </td>
                     <td>{{ donation.created_at.strftime('%Y-%m-%d') }}</td>
                     <td>
-                        {% if donation.status == 'pending' and donation.payment_method == 'bank' %}
+                        {% if donation.status in ['pending','awaiting_verification'] %}
                         <form method="POST" action="{{ url_for('admin.confirm_donation', id=donation.id) }}" style="display: inline;">
                             <button type="submit" class="btn btn-sm btn-success">Confirm</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('admin.reject_donation', id=donation.id) }}" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
                         </form>
                         {% endif %}
                     </td>
