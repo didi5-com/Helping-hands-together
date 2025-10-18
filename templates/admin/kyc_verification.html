@@ -30,8 +30,17 @@
                                 <h5>{{ kyc.user.name }} ({{ kyc.user.email }})</h5>
                                 <p><strong>ID Type:</strong> {{ kyc.id_type }}</p>
                                 <p><strong>Submitted:</strong> {{ kyc.submitted_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
-                                {% set display_path = kyc.document_path if kyc.document_path.startswith('/static') else kyc.document_path.replace(config['UPLOAD_FOLDER'], '/static/uploads') %}
+                                {% set display_path = None %}
+                                {% if kyc.document_path %}
+                                    {% if kyc.document_path.startswith('/static') %}
+                                        {% set display_path = kyc.document_path %}
+                                    {% else %}
+                                        {% set display_path = kyc.document_path.replace(config['UPLOAD_FOLDER'], '/static/uploads') %}
+                                    {% endif %}
+                                {% endif %}
+                                {% if display_path %}
                                 <a href="{{ display_path }}" target="_blank" class="btn btn-sm btn-info">View Document</a>
+                                {% endif %}
                             </div>
                             <div class="col-md-4 text-end">
                                 <form method="POST" action="{{ url_for('admin.verify_kyc', id=kyc.id) }}" class="d-inline">
@@ -56,7 +65,7 @@
             {% for kyc in verified %}
             <div class="card mb-2">
                 <div class="card-body">
-                    <strong>{{ kyc.user.name }}</strong> - Verified on {{ kyc.verified_at.strftime('%B %d, %Y') }}
+                    <strong>{{ kyc.user.name }}</strong> - Verified on {{ kyc.verified_at.strftime('%B %d, %Y') if kyc.verified_at else 'N/A' }}
                 </div>
             </div>
             {% endfor %}

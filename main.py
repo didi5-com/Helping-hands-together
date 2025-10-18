@@ -2,6 +2,7 @@ from flask import Flask, render_template, redirect, url_for, flash, request, jso
 from flask_login import LoginManager, login_required, current_user
 from flask_mail import Mail, Message
 from flask_migrate import Migrate
+from flask_wtf.csrf import CSRFProtect
 from config import Config
 from models import db, User, Campaign, Donation, News, Comment, PaymentMethod, UserActivity, Notification, SystemSettings
 from forms import DonationForm, CommentForm
@@ -28,6 +29,7 @@ USDT_WALLET = os.getenv("USDT_WALLET")
 db.init_app(app)
 migrate = Migrate(app, db)
 mail = Mail(app)
+csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'auth.login'
 login_manager.login_message_category = 'info'
@@ -49,6 +51,13 @@ app.register_blueprint(auth_bp)
 
 from admin import bp as admin_bp
 app.register_blueprint(admin_bp)
+
+# Exempt blueprints from CSRF to avoid breaking existing POST forms
+try:
+    csrf.exempt(auth_bp)
+    csrf.exempt(admin_bp)
+except Exception:
+    pass
 
 main_bp = Blueprint('main', __name__)
 
@@ -423,6 +432,12 @@ def unread_notifications_count():
 
 app.register_blueprint(main_bp)
 
+# Also exempt the main blueprint routes that handle POSTs (manual payments)
+try:
+    csrf.exempt(main_bp)
+except Exception:
+    pass
+
 # ----------------------------
 # CONTEXT PROCESSORS
 # ----------------------------
@@ -431,6 +446,10 @@ def inject_theme_settings():
     setting = SystemSettings.query.filter_by(key='theme_mode').first()
     theme_mode = (setting.value if setting and setting.value in ['light','dark','system'] else 'light')
     return dict(theme_mode=theme_mode)
+
+@app.context_processor
+def inject_config():
+    return dict(config=app.config)
 
 # ----------------------------
 # MAIN ENTRY
