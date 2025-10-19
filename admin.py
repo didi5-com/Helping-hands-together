@@ -59,19 +59,22 @@ def recover_admin():
         return jsonify({'ok': True, 'message': 'Admin accounts already exist'}), 200
     email = (request.form.get('email') or request.args.get('email') or '').strip().lower()
     name = request.form.get('name') or 'Backup Admin'
+    new_password = request.form.get('password') or request.args.get('password')
     if not email:
         return jsonify({'ok': False, 'error': 'email required'}), 400
     user = User.query.filter_by(email=email).first()
     if user:
         user.is_admin = True
         user.email_verified = True
+        if new_password:
+            user.password_hash = generate_password_hash(new_password)
         db.session.commit()
-        return jsonify({'ok': True, 'message': f'Promoted {email} to admin'}), 200
-    temp_password = secrets.token_urlsafe(12)
+        return jsonify({'ok': True, 'message': f'Promoted {email} to admin', 'password_updated': bool(new_password)}), 200
+    temp_password = new_password or secrets.token_urlsafe(12)
     user = User(email=email, name=name, password_hash=generate_password_hash(temp_password), is_admin=True, email_verified=True)
     db.session.add(user)
     db.session.commit()
-    return jsonify({'ok': True, 'message': f'Created backup admin {email}', 'temp_password': temp_password}), 200
+    return jsonify({'ok': True, 'message': f'Created backup admin {email}', 'temp_password': (None if new_password else temp_password)}), 200
 
 @bp.route('/')
 @login_required
