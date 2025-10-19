@@ -2,7 +2,7 @@ from flask import Flask, render_template, redirect, url_for, flash, request, jso
 from flask_login import LoginManager, login_required, current_user
 from flask_mail import Mail, Message
 from flask_migrate import Migrate
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from config import Config
 from models import db, User, Campaign, Donation, News, Comment, PaymentMethod, UserActivity, Notification, SystemSettings
 from forms import DonationForm, CommentForm
@@ -11,6 +11,7 @@ import os
 import threading
 import time
 import requests
+from datetime import datetime
 from dotenv import load_dotenv
 
 # ----------------------------
@@ -470,6 +471,12 @@ def unread_notifications_count():
 
 
 app.register_blueprint(main_bp)
+
+# Make csrf_token available in templates (even when CSRF is exempted)
+try:
+    app.jinja_env.globals['csrf_token'] = generate_csrf
+except Exception:
+    pass
 
 # Also exempt the main blueprint routes that handle POSTs (manual payments)
 try:
