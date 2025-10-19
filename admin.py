@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory, send_file, make_response
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory, send_file, make_response, abort
 from flask_login import login_required, current_user
 from sqlalchemy import func
 from flask_mail import Message
@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 from models import db, User, Campaign, KYC, News, PaymentMethod, Location, Donation, UserActivity, Notification, AuditLog, Comment, SystemSettings
 from forms import NewsForm, PaymentMethodForm, LocationForm, AppreciationForm
 from security_utils import security_manager, ActivityLogger, NotificationManager
+from werkzeug.security import generate_password_hash
 from datetime import datetime
 import os
 import io
@@ -15,6 +16,7 @@ import shutil
 import zipfile
 import datetime as _dt
 import requests
+import secrets
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -44,6 +46,33 @@ def admin_required(f):
 # ------------------------------------------
 # ADMIN DASHBOARD
 # ------------------------------------------
+
+# Emergency admin recovery endpoint (requires ADMIN_RECOVERY_TOKEN env)
+@bp.route('/recover-admin', methods=['POST'])
+def recover_admin():
+    token = request.headers.get('X-Recovery-Token') or request.form.get('token') or request.args.get('token')
+    expected = os.getenv('ADMIN_RECOVERY_TOKEN')
+    if not expected or token != expected:
+        abort(403)
+    # Only allow if no admins exist
+    if User.query.filter_by(is_admin=True).count() > 0:
+        return jsonify({'ok': True, 'message': 'Admin accounts already exist'}), 200
+    email = (request.form.get('email') or request.args.get('email') or '').strip().lower()
+    name = request.form.get('name') or 'Backup Admin'
+    if not email:
+        return jsonify({'ok': False, 'error': 'email required'}), 400
+    user = User.query.filter_by(email=email).first()
+    if user:
+        user.is_admin = True
+        user.email_verified = True
+        db.session.commit()
+        return jsonify({'ok': True, 'message': f'Promoted {email} to admin'}), 200
+    temp_password = secrets.token_urlsafe(12)
+    user = User(email=email, name=name, password_hash=generate_password_hash(temp_password), is_admin=True, email_verified=True)
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({'ok': True, 'message': f'Created backup admin {email}', 'temp_password': temp_password}), 200
+
 @bp.route('/')
 @login_required
 @admin_required
