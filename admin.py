@@ -693,7 +693,7 @@ def system_settings():
 
 
 # ------------------------------------------
-# BACKUPS AND EXPORTS
+# BACKUPS, EXPORTS, RESTORE/IMPORT
 # ------------------------------------------
 
 def _ensure_dir(path):
@@ -885,6 +885,210 @@ def delete_export(filename):
     else:
         flash('File not found', 'warning')
     return redirect(url_for('admin.list_exports'))
+
+
+# ------------------------------------------
+# RESTORE / IMPORT PAGES & HANDLERS
+# ------------------------------------------
+@bp.route('/restore')
+@login_required
+@admin_required
+def restore():
+    return render_template('admin/restore.html')
+
+
+def _parse_dt(val):
+    if isinstance(val, str):
+        try:
+            return _dt.datetime.fromisoformat(val)
+        except Exception:
+            return val
+    return val
+
+
+def _filter_model_columns(Model, data: dict):
+    cols = {c.name for c in Model.__table__.columns}
+    out = {}
+    for k, v in data.items():
+        if k in cols:
+            out[k] = _parse_dt(v)
+    return out
+
+
+def _import_rows(Model, rows: list, replace: bool = False):
+    if replace:
+        Model.query.delete()
+    for item in rows:
+        payload = _filter_model_columns(Model, item)
+        obj = None
+        if 'id' in payload:
+            obj = Model.query.get(payload['id'])
+        if obj:
+            for k, v in payload.items():
+                setattr(obj, k, v)
+        else:
+            obj = Model(**payload)
+            db.session.add(obj)
+
+
+def _import_from_json_mapping(files_map: dict, replace: bool = True):
+    # Order matters due to FK constraints
+    mapping = [
+        ('users.json', User),
+        ('locations.json', Location),
+        ('payment_methods.json', PaymentMethod),
+        ('kyc.json', KYC),
+        ('campaigns.json', Campaign),
+        ('donations.json', Donation),
+        ('news.json', News),
+        ('comments.json', Comment),
+        ('notifications.json', Notification),
+        ('user_activities.json', UserActivity),
+        ('audit_logs.json', AuditLog),
+    ]
+    for fname, Model in mapping:
+        if fname in files_map:
+            rows = json.loads(files_map[fname])
+            _import_rows(Model, rows, replace=replace)
+    # System settings
+    if 'system_settings.json' in files_map:
+        rows = json.loads(files_map['system_settings.json'])
+        for item in rows:
+            key = item.get('key')
+            if not key:
+                continue
+            setting = SystemSettings.query.filter_by(key=key).first()
+            if setting:
+                setting.value = item.get('value')
+                setting.is_encrypted = bool(item.get('is_encrypted', False))
+            else:
+                db.session.add(SystemSettings(
+                    key=key,
+                    value=item.get('value'),
+                    is_encrypted=bool(item.get('is_encrypted', False))
+                ))
+
+
+@bp.route('/restore/backup', methods=['POST'])
+@login_required
+@admin_required
+def restore_backup():
+    file = request.files.get('file')
+    if not file:
+        flash('No file selected', 'warning')
+        return redirect(url_for('admin.restore'))
+    filename = secure_filename(file.filename)
+    if not filename.lower().endswith('.zip'):
+        flash('Please upload a .zip backup', 'danger')
+        return redirect(url_for('admin.restore'))
+
+    imports_dir = _ensure_dir(os.path.join(current_app.instance_path, 'imports'))
+    save_path = os.path.join(imports_dir, filename)
+    file.save(save_path)
+
+    with zipfile.ZipFile(save_path, 'r') as zf:
+        names = zf.namelist()
+        # Prefer DB replacement if possible
+        if 'database.sqlite' in names:
+            db_path = _abs_db_path()
+            if not db_path:
+                flash('Cannot restore DB file on non-SQLite configuration. Use data JSON import instead.', 'danger')
+                return redirect(url_for('admin.restore'))
+            # Backup current DB
+            bdir = _ensure_dir(os.path.join(current_app.instance_path, 'backups'))
+            ts = _dt.datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+            shutil.copyfile(db_path, os.path.join(bdir, f'pre-restore-{ts}.sqlite')) if os.path.exists(db_path) else None
+            # Replace DB
+            data = zf.read('database.sqlite')
+            with open(db_path, 'wb') as out:
+                out.write(data)
+            try:
+                db.session.remove()
+                db.engine.dispose()
+            except Exception:
+                pass
+            flash('Database restored from backup. Consider restarting the app.', 'success')
+            return redirect(url_for('admin.dashboard'))
+        # JSON-based
+        files_map = {}
+        for name in names:
+            if name.endswith('.json'):
+                files_map[name] = zf.read(name).decode('utf-8')
+        if not files_map:
+            flash('Backup zip did not contain database.sqlite or JSON files', 'danger')
+            return redirect(url_for('admin.restore'))
+        _import_from_json_mapping(files_map, replace=True)
+        db.session.commit()
+        flash('Backup imported successfully (JSON mode)', 'success')
+        return redirect(url_for('admin.dashboard'))
+
+
+@bp.route('/restore/export', methods=['POST'])
+@login_required
+@admin_required
+def restore_export():
+    file = request.files.get('file')
+    if not file:
+        flash('No file selected', 'warning')
+        return redirect(url_for('admin.restore'))
+    filename = secure_filename(file.filename)
+    if not filename.lower().endswith('.zip'):
+        flash('Please upload a .zip export', 'danger')
+        return redirect(url_for('admin.restore'))
+
+    imports_dir = _ensure_dir(os.path.join(current_app.instance_path, 'imports'))
+    save_path = os.path.join(imports_dir, filename)
+    file.save(save_path)
+
+    with zipfile.ZipFile(save_path, 'r') as zf:
+        files_map = {}
+        for name in zf.namelist():
+            if name.endswith('.json'):
+                files_map[name] = zf.read(name).decode('utf-8')
+    if not files_map:
+        flash('Export zip did not contain JSON files', 'danger')
+        return redirect(url_for('admin.restore'))
+    _import_from_json_mapping(files_map, replace=True)
+    db.session.commit()
+    flash('Data export imported successfully', 'success')
+    return redirect(url_for('admin.dashboard'))
+
+
+@bp.route('/restore/settings', methods=['POST'])
+@login_required
+@admin_required
+def restore_settings():
+    file = request.files.get('file')
+    if not file:
+        flash('No file selected', 'warning')
+        return redirect(url_for('admin.restore'))
+    filename = secure_filename(file.filename)
+    if not filename.lower().endswith('.json'):
+        flash('Please upload a JSON settings file', 'danger')
+        return redirect(url_for('admin.restore'))
+
+    data = file.read().decode('utf-8')
+    try:
+        rows = json.loads(data)
+        for item in rows:
+            key = item.get('key')
+            if not key:
+                continue
+            setting = SystemSettings.query.filter_by(key=key).first()
+            if setting:
+                setting.value = item.get('value')
+                setting.is_encrypted = bool(item.get('is_encrypted', False))
+            else:
+                db.session.add(SystemSettings(
+                    key=key,
+                    value=item.get('value'),
+                    is_encrypted=bool(item.get('is_encrypted', False))
+                ))
+        db.session.commit()
+        flash('Settings imported successfully', 'success')
+    except Exception as e:
+        flash(f'Failed to import settings: {e}', 'danger')
+    return redirect(url_for('admin.system_settings'))
 
 
 # ------------------------------------------

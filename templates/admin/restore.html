@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Restore / Import - Admin{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <h2 class="mb-4"><i class="bi bi-upload"></i> Restore / Import</h2>
+
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><strong>Restore from Backup (.zip)</strong></div>
+        <div class="card-body">
+          <p class="text-muted small">Uploads a backup created in Admin → Backups. If it contains <code>database.sqlite</code> and you use SQLite, it will replace the database. Otherwise, JSON data will be imported.</p>
+          <form method="POST" action="{{ url_for('admin.restore_backup') }}" enctype="multipart/form-data">
+            <div class="mb-3">
+              <input type="file" name="file" class="form-control" accept=".zip" required>
+            </div>
+            <button class="btn btn-primary" type="submit"><i class="bi bi-archive"></i> Restore Backup</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><strong>Import Data Export (.zip)</strong></div>
+        <div class="card-body">
+          <p class="text-muted small">Imports a data export ZIP (JSON files per table) and replaces current records.</p>
+          <form method="POST" action="{{ url_for('admin.restore_export') }}" enctype="multipart/form-data">
+            <div class="mb-3">
+              <input type="file" name="file" class="form-control" accept=".zip" required>
+            </div>
+            <button class="btn btn-success" type="submit"><i class="bi bi-box-arrow-in-down"></i> Import Export</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><strong>Import System Settings (.json)</strong></div>
+        <div class="card-body">
+          <p class="text-muted small">Upload a previously exported <code>system_settings.json</code> file to restore configuration.</p>
+          <form method="POST" action="{{ url_for('admin.restore_settings') }}" enctype="multipart/form-data">
+            <div class="mb-3">
+              <input type="file" name="file" class="form-control" accept="application/json" required>
+            </div>
+            <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-sliders"></i> Import Settings</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-4">
+    <a class="btn btn-outline-primary me-2" href="{{ url_for('admin.list_backups') }}"><i class="bi bi-archive"></i> Manage Backups</a>
+    <a class="btn btn-outline-success me-2" href="{{ url_for('admin.list_exports') }}"><i class="bi bi-box-arrow-down"></i> Manage Exports</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.system_settings') }}"><i class="bi bi-gear"></i> System Settings</a>
+  </div>
+</div>
+{% endblock %}

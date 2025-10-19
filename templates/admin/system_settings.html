@@ -22,6 +22,9 @@
             <a class="btn btn-outline-secondary me-2" href="{{ url_for('admin.list_backups') }}">
                 <i class="bi bi-archive"></i> Manage Backups
             </a>
+            <a class="btn btn-outline-secondary me-2" href="{{ url_for('admin.restore') }}">
+                <i class="bi bi-upload"></i> Import / Restore
+            </a>
             <button class="btn btn-warning" onclick="resetSettings()">
                 <i class="bi bi-arrow-clockwise"></i> Reset Defaults
             </button>
