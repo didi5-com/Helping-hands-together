@@ -15,6 +15,17 @@
                     <label class="form-label">Recipient Email</label>
                     <input type="text" class="form-control" value="{{ user.email }}" disabled>
                 </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.from_name.label(class="form-label") }}
+                        {{ form.from_name(class="form-control", placeholder=(current_app.config.get('PLATFORM_NAME') or 'Helping Hand Together')) }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ form.from_email.label(class="form-label") }}
+                        {{ form.from_email(class="form-control", placeholder="yourname@gmail.com") }}
+                        <small class="text-muted">If your SMTP doesn't allow custom From, we'll set Reply-To to this address.</small>
+                    </div>
+                </div>
                 <div class="mb-3">
                     {{ form.message.label(class="form-label") }}
                     {{ form.message(class="form-control", rows=5) }}

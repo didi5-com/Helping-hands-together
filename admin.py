@@ -327,16 +327,33 @@ def appreciate_user(user_id):
     if form.validate_on_submit():
         mail = current_app.extensions['mail']
         default_sender = current_app.config.get('MAIL_DEFAULT_SENDER')
-        subject_prefix = current_app.config.get('PLATFORM_NAME', 'Helping Hand Together')
-        msg = Message(subject=f'Appreciation from {subject_prefix}',
+        platform_name = current_app.config.get('PLATFORM_NAME', 'Helping Hand Together')
+
+        # Build sender override
+        from_name = form.from_name.data.strip() if getattr(form, 'from_name', None) and form.from_name.data else platform_name
+        from_email = form.from_email.data.strip() if getattr(form, 'from_email', None) and form.from_email.data else None
+
+        # Prefer custom sender if provided; otherwise fall back to default sender
+        sender_value = (from_name, from_email) if from_email else default_sender
+
+        msg = Message(subject=f'Appreciation from {from_name or platform_name}',
                       recipients=[user.email],
                       body=form.message.data,
-                      sender=default_sender)
+                      sender=sender_value)
+        # Always set Reply-To to from_email if provided
+        if from_email:
+            msg.reply_to = from_email
         try:
             mail.send(msg)
             flash(f'Appreciation email sent to {user.name}', 'success')
         except Exception as e:
-            flash(f'Failed to send email: {str(e)}', 'danger')
+            # Retry with default sender if custom sender rejected by SMTP
+            try:
+                msg.sender = default_sender
+                mail.send(msg)
+                flash(f'Email sent to {user.name} (Reply-To set to {from_email})', 'warning')
+            except Exception as e2:
+                flash(f'Failed to send email: {str(e2)}', 'danger')
         return redirect(url_for('admin.users'))
     return render_template('admin/appreciate.html', user=user, form=form)
 
@@ -894,7 +911,9 @@ def send_notification():
     title = request.form.get('title')
     message = request.form.get('message')
     notification_type = request.form.get('type', 'info')
-    send_email = request.form.get('send_email') == 'on'
+    send_email = request.form.get('send_email') in ['on','true','1']
+    from_name = request.form.get('from_name') or current_app.config.get('PLATFORM_NAME', 'Helping Hand Together')
+    from_email = request.form.get('from_email') or None
     
     if 'all_users' in user_ids:
         users = User.query.all()
@@ -910,16 +929,22 @@ def send_notification():
     if send_email and users:
         mail = current_app.extensions['mail']
         default_sender = current_app.config.get('MAIL_DEFAULT_SENDER')
-        subject_prefix = current_app.config.get('PLATFORM_NAME', 'Helping Hand Together')
         for user in users:
             try:
-                msg = Message(subject=f"[{subject_prefix}] {title}",
+                msg = Message(subject=f"[{from_name}] {title}",
                               recipients=[user.email],
                               body=message,
-                              sender=default_sender)
+                              sender=((from_name, from_email) if from_email else default_sender))
+                if from_email:
+                    msg.reply_to = from_email
                 mail.send(msg)
             except Exception as e:
-                current_app.logger.warning(f"Failed to send email to {user.email}: {e}")
+                # Fallback to default sender
+                try:
+                    msg.sender = default_sender
+                    mail.send(msg)
+                except Exception as e2:
+                    current_app.logger.warning(f"Failed to email {user.email}: {e2}")
     
     flash(f'Notification sent to {len(users)} users{" and emailed" if send_email else ""}', 'success')
     return redirect(url_for('admin.manage_notifications'))

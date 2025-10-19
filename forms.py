@@ -83,5 +83,7 @@ class LocationForm(FlaskForm):
     submit = SubmitField('Add Location')
 
 class AppreciationForm(FlaskForm):
+    from_name = StringField('From Name', validators=[Optional(), Length(max=120)])
+    from_email = StringField('From Gmail (optional)', validators=[Optional(), Email(), Length(max=200)])
     message = TextAreaField('Appreciation Message', validators=[DataRequired(), Length(min=10, max=1000)])
     submit = SubmitField('Send Appreciation')
