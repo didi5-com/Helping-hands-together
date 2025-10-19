@@ -8,6 +8,9 @@ from models import db, User, Campaign, Donation, News, Comment, PaymentMethod, U
 from forms import DonationForm, CommentForm
 from security_utils import ActivityLogger, NotificationManager, LocationManager
 import os
+import threading
+import time
+import requests
 from dotenv import load_dotenv
 
 # ----------------------------
@@ -16,6 +19,38 @@ from dotenv import load_dotenv
 app = Flask(__name__)
 app.config.from_object(Config)
 load_dotenv()
+
+# ----------------------------
+# SELF-PING KEEPALIVE (optional)
+# ----------------------------
+KEEPALIVE_STARTED = False
+
+def start_self_ping():
+    """Background thread that pings /health every 10 minutes to keep the app warm.
+    Configure via env:
+      - SELF_PING_URL: full base URL to your app (e.g., https://your-app.onrender.com)
+      - ENABLE_SELF_PING: set to false to disable (default: true)
+    Falls back to http://127.0.0.1:{PORT}/health if no external URL is provided.
+    """
+    global KEEPALIVE_STARTED
+    if KEEPALIVE_STARTED:
+        return
+    KEEPALIVE_STARTED = True
+
+    def ping_loop():
+        with app.app_context():
+            base = os.getenv("SELF_PING_URL") or os.getenv("RENDER_EXTERNAL_URL")
+            port = os.getenv("PORT", "5000")
+            if not base:
+                base = f"http://127.0.0.1:{port}"
+            url = base.rstrip('/') + "/health"
+            session = requests.Session()
+            while True:
+                try:
+                    session.get(url, timeout=5)
+                except Exception:
+                    pass
+                time.sleep(600)  # 10 minutes
 
 # Load payment environment variables
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
@@ -60,6 +95,10 @@ except Exception:
     pass
 
 main_bp = Blueprint('main', __name__)
+
+@main_bp.route('/health')
+def health():
+    return jsonify({'status': 'ok'}), 200
 
 # ----------------------------
 # ROUTES
@@ -437,6 +476,12 @@ try:
     csrf.exempt(main_bp)
 except Exception:
     pass
+
+# Start keepalive self-ping in the real process (avoid duplicate threads under reloader)
+if os.getenv('ENABLE_SELF_PING', 'true').lower() in ['1', 'true', 'yes', 'on']:
+    is_reloader = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+    if not app.debug or is_reloader:
+        start_self_ping()
 
 # ----------------------------
 # CONTEXT PROCESSORS
