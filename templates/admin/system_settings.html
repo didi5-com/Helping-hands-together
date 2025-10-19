@@ -13,6 +13,15 @@
             <button class="btn btn-outline-primary me-2" onclick="exportSettings()">
                 <i class="bi bi-download"></i> Export Config
             </button>
+            <button class="btn btn-outline-success me-2" onclick="exportData()">
+                <i class="bi bi-box-arrow-down"></i> Export Data
+            </button>
+            <a class="btn btn-outline-secondary me-2" href="{{ url_for('admin.list_exports') }}">
+                <i class="bi bi-folder2-open"></i> Manage Exports
+            </a>
+            <a class="btn btn-outline-secondary me-2" href="{{ url_for('admin.list_backups') }}">
+                <i class="bi bi-archive"></i> Manage Backups
+            </a>
             <button class="btn btn-warning" onclick="resetSettings()">
                 <i class="bi bi-arrow-clockwise"></i> Reset Defaults
             </button>
@@ -323,11 +332,17 @@ function clearCache() {
 }
 
 function backupDatabase() {
-    alert('Database backup functionality would create a backup of the current database');
+    fetch("{{ url_for('admin.create_backup') }}", {method: 'POST'})
+      .then(() => window.location = "{{ url_for('admin.list_backups') }}");
 }
 
 function exportSettings() {
-    alert('Settings export would generate a configuration file');
+    window.location = "{{ url_for('admin.export_config') }}";
+}
+
+function exportData() {
+    fetch("{{ url_for('admin.create_data_export') }}", {method: 'POST'})
+      .then(() => window.location = "{{ url_for('admin.list_exports') }}");
 }
 
 function resetSettings() {

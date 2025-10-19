@@ -1,14 +1,19 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory, send_file, make_response
 from flask_login import login_required, current_user
 from sqlalchemy import func
 from flask_mail import Message
 from functools import wraps
 from werkzeug.utils import secure_filename
-from models import db, User, Campaign, KYC, News, PaymentMethod, Location, Donation, UserActivity, Notification, AuditLog
+from models import db, User, Campaign, KYC, News, PaymentMethod, Location, Donation, UserActivity, Notification, AuditLog, Comment, SystemSettings
 from forms import NewsForm, PaymentMethodForm, LocationForm, AppreciationForm
 from security_utils import security_manager, ActivityLogger, NotificationManager
 from datetime import datetime
 import os
+import io
+import json
+import shutil
+import zipfile
+import datetime as _dt
 import requests
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -668,6 +673,201 @@ def system_settings():
     settings_map = {s.key: s.value for s in settings}
 
     return render_template('admin/system_settings.html', settings=settings, settings_map=settings_map)
+
+
+# ------------------------------------------
+# BACKUPS AND EXPORTS
+# ------------------------------------------
+
+def _ensure_dir(path):
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _abs_db_path():
+    uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    if uri.startswith('sqlite:///'):
+        rel = uri.replace('sqlite:///', '', 1)
+        return rel if os.path.isabs(rel) else os.path.join(current_app.root_path, rel)
+    return None
+
+
+def _row_to_dict(row):
+    return {c.name: getattr(row, c.name) for c in row.__table__.columns}
+
+
+def _serialize_queryset(rows):
+    out = []
+    for r in rows:
+        d = _row_to_dict(r)
+        # Convert datetimes
+        for k, v in list(d.items()):
+            if isinstance(v, (_dt.datetime,)):
+                d[k] = v.isoformat()
+        out.append(d)
+    return out
+
+
+@bp.route('/backup/create', methods=['POST'])
+@login_required
+@admin_required
+def create_backup():
+    backups_dir = _ensure_dir(os.path.join(current_app.instance_path, 'backups'))
+    ts = _dt.datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    zip_name = f"backup-{ts}.zip"
+    zip_path = os.path.join(backups_dir, zip_name)
+
+    # Gather content
+    mem = io.BytesIO()
+    with zipfile.ZipFile(mem, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+        # DB file (if sqlite)
+        db_path = _abs_db_path()
+        if db_path and os.path.exists(db_path):
+            zf.write(db_path, arcname='database.sqlite')
+        else:
+            # Fallback: dump data tables to JSON if not sqlite
+            data_json = {
+                'users': _serialize_queryset(User.query.all()),
+                'campaigns': _serialize_queryset(Campaign.query.all()),
+                'donations': _serialize_queryset(Donation.query.all()),
+                'kyc': _serialize_queryset(KYC.query.all()),
+                'payment_methods': _serialize_queryset(PaymentMethod.query.all()),
+                'locations': _serialize_queryset(Location.query.all()),
+                'news': _serialize_queryset(News.query.all()),
+                'comments': _serialize_queryset([]),
+            }
+            zf.writestr('data.json', json.dumps(data_json, indent=2))
+
+        # System settings always included
+        settings = _serialize_queryset(SystemSettings.query.all())
+        zf.writestr('system_settings.json', json.dumps(settings, indent=2))
+
+    # Persist zip
+    with open(zip_path, 'wb') as f:
+        f.write(mem.getvalue())
+
+    flash('Backup created successfully', 'success')
+    return redirect(url_for('admin.list_backups'))
+
+
+@bp.route('/backups')
+@login_required
+@admin_required
+def list_backups():
+    backups_dir = _ensure_dir(os.path.join(current_app.instance_path, 'backups'))
+    files = []
+    for name in sorted(os.listdir(backups_dir)):
+        path = os.path.join(backups_dir, name)
+        if os.path.isfile(path) and name.lower().endswith('.zip'):
+            stat = os.stat(path)
+            files.append({
+                'name': name,
+                'size': stat.st_size,
+                'modified': _dt.datetime.utcfromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S UTC')
+            })
+    return render_template('admin/backups.html', files=files)
+
+
+@bp.route('/backups/download/<path:filename>')
+@login_required
+@admin_required
+def download_backup(filename):
+    backups_dir = os.path.join(current_app.instance_path, 'backups')
+    return send_from_directory(backups_dir, filename, as_attachment=True)
+
+
+@bp.route('/backups/delete/<path:filename>', methods=['POST'])
+@login_required
+@admin_required
+def delete_backup(filename):
+    backups_dir = os.path.join(current_app.instance_path, 'backups')
+    path = os.path.join(backups_dir, filename)
+    if os.path.isfile(path):
+        os.remove(path)
+        flash('Backup deleted', 'info')
+    else:
+        flash('File not found', 'warning')
+    return redirect(url_for('admin.list_backups'))
+
+
+@bp.route('/export/config')
+@login_required
+@admin_required
+def export_config():
+    settings = _serialize_queryset(SystemSettings.query.all())
+    buf = io.BytesIO(json.dumps(settings, indent=2).encode('utf-8'))
+    ts = _dt.datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    return send_file(buf, as_attachment=True, download_name=f'system_settings-{ts}.json', mimetype='application/json')
+
+
+@bp.route('/export/data/create', methods=['POST'])
+@login_required
+@admin_required
+def create_data_export():
+    exports_dir = _ensure_dir(os.path.join(current_app.instance_path, 'exports'))
+    ts = _dt.datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    zip_name = f"export-{ts}.zip"
+    zip_path = os.path.join(exports_dir, zip_name)
+
+    mem = io.BytesIO()
+    with zipfile.ZipFile(mem, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr('users.json', json.dumps(_serialize_queryset(User.query.all()), indent=2))
+        zf.writestr('campaigns.json', json.dumps(_serialize_queryset(Campaign.query.all()), indent=2))
+        zf.writestr('donations.json', json.dumps(_serialize_queryset(Donation.query.all()), indent=2))
+        zf.writestr('kyc.json', json.dumps(_serialize_queryset(KYC.query.all()), indent=2))
+        zf.writestr('payment_methods.json', json.dumps(_serialize_queryset(PaymentMethod.query.all()), indent=2))
+        zf.writestr('locations.json', json.dumps(_serialize_queryset(Location.query.all()), indent=2))
+        zf.writestr('news.json', json.dumps(_serialize_queryset(News.query.all()), indent=2))
+        zf.writestr('comments.json', json.dumps(_serialize_queryset(Comment.query.all()), indent=2))
+        zf.writestr('notifications.json', json.dumps(_serialize_queryset(Notification.query.all()), indent=2))
+        zf.writestr('user_activities.json', json.dumps(_serialize_queryset(UserActivity.query.all()), indent=2))
+        zf.writestr('audit_logs.json', json.dumps(_serialize_queryset(AuditLog.query.all()), indent=2))
+
+    with open(zip_path, 'wb') as f:
+        f.write(mem.getvalue())
+
+    flash('Data export created', 'success')
+    return redirect(url_for('admin.list_exports'))
+
+
+@bp.route('/exports')
+@login_required
+@admin_required
+def list_exports():
+    exports_dir = _ensure_dir(os.path.join(current_app.instance_path, 'exports'))
+    files = []
+    for name in sorted(os.listdir(exports_dir)):
+        path = os.path.join(exports_dir, name)
+        if os.path.isfile(path) and name.lower().endswith('.zip'):
+            stat = os.stat(path)
+            files.append({
+                'name': name,
+                'size': stat.st_size,
+                'modified': _dt.datetime.utcfromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S UTC')
+            })
+    return render_template('admin/exports.html', files=files)
+
+
+@bp.route('/exports/download/<path:filename>')
+@login_required
+@admin_required
+def download_export(filename):
+    exports_dir = os.path.join(current_app.instance_path, 'exports')
+    return send_from_directory(exports_dir, filename, as_attachment=True)
+
+
+@bp.route('/exports/delete/<path:filename>', methods=['POST'])
+@login_required
+@admin_required
+def delete_export(filename):
+    exports_dir = os.path.join(current_app.instance_path, 'exports')
+    path = os.path.join(exports_dir, filename)
+    if os.path.isfile(path):
+        os.remove(path)
+        flash('Export deleted', 'info')
+    else:
+        flash('File not found', 'warning')
+    return redirect(url_for('admin.list_exports'))
 
 
 # ------------------------------------------
