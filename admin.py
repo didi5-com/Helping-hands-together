@@ -54,9 +54,6 @@ def recover_admin():
     expected = os.getenv('ADMIN_RECOVERY_TOKEN')
     if not expected or token != expected:
         abort(403)
-    # Only allow if no admins exist
-    if User.query.filter_by(is_admin=True).count() > 0:
-        return jsonify({'ok': True, 'message': 'Admin accounts already exist'}), 200
     email = (request.form.get('email') or request.args.get('email') or '').strip().lower()
     name = request.form.get('name') or 'Backup Admin'
     new_password = request.form.get('password') or request.args.get('password')
